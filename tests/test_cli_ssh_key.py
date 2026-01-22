@@ -61,7 +61,7 @@ def test_add_ssh_key_from_stdin(cli, requests_mock, fs, monkeypatch):
 
     # Verify success message
     assert "testhost" in out
-    assert "added successfully" in out
+    assert "successfully" in out
 
 
 def test_add_ssh_key_with_custom_id(cli, requests_mock, fs, monkeypatch):
@@ -96,7 +96,7 @@ def test_add_ssh_key_with_custom_id(cli, requests_mock, fs, monkeypatch):
     # Verify the custom key ID was used
     assert ("PUT", "/v1/admin/keys/my-custom-key") in api_calls
     assert "my-custom-key" in out
-    assert "added successfully" in out
+    assert "successfully" in out
 
 
 def test_add_ssh_key_already_exists(cli, requests_mock, fs, monkeypatch):
@@ -250,7 +250,67 @@ def test_add_ssh_key_sanitizes_hostname(cli, requests_mock, fs, monkeypatch):
     # Verify the sanitized key ID was used
     assert ("PUT", "/v1/admin/keys/my-host-local") in api_calls
     assert "my-host-local" in out
-    assert "added successfully" in out
+    assert "successfully" in out
+
+
+def test_add_ssh_key_update_existing(cli, requests_mock, fs, monkeypatch):
+    """Test --add-ssh-key updates existing key when it already exists (409)."""
+    write_config(auth_req)
+
+    monkeypatch.setattr("socket.gethostname", lambda: "TestHost")
+
+    def return_empty_keys(request, context):
+        return ""
+
+    def return_conflict(request, context):
+        context.status_code = 409
+        return '{"status": "Failure", "message": "The plot already exist!"}'
+
+    def return_ok(request, context):
+        return ""
+
+    requests_mock.register_uri("GET", f"{API_ROOT}admin/keys", text=return_empty_keys)
+    requests_mock.register_uri("PUT", f"{API_ROOT}admin/keys/testhost", text=return_conflict)
+    requests_mock.register_uri("POST", f"{API_ROOT}admin/keys/testhost/key", text=return_ok)
+    requests_mock.register_uri("POST", f"{API_ROOT}admin/keys/testhost/name", text=return_ok)
+    requests_mock.register_uri("POST", f"{API_ROOT}admin/keys/testhost/summary", text=return_ok)
+
+    ssh_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..."
+    out, err = cli("--add-ssh-key", stdin=ssh_key)
+
+    # Should succeed with "updated" message
+    assert "testhost" in out
+    assert "updated successfully" in out
+
+
+def test_add_ssh_key_duplicate_key(cli, requests_mock, fs, monkeypatch):
+    """Test --add-ssh-key handles duplicate key content gracefully."""
+    write_config(auth_req)
+
+    monkeypatch.setattr("socket.gethostname", lambda: "TestHost")
+
+    def return_empty_keys(request, context):
+        return ""
+
+    def return_ok(request, context):
+        return ""
+
+    def return_duplicate(request, context):
+        return '{"status": "Failure", "message": "Duplicate key detected, keys need to be unique."}'
+
+    requests_mock.register_uri("GET", f"{API_ROOT}admin/keys", text=return_empty_keys)
+    requests_mock.register_uri("PUT", f"{API_ROOT}admin/keys/testhost", text=return_ok)
+    requests_mock.register_uri("POST", f"{API_ROOT}admin/keys/testhost/key", text=return_duplicate)
+
+    ssh_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..."
+
+    with pytest.raises(CliExit) as e:
+        cli("--add-ssh-key", stdin=ssh_key)
+
+    out, err = e.value.args
+    assert e.value.code == 1
+    assert "Failed to add SSH key" in err
+    assert "Duplicate" in err
 
 
 def test_add_ssh_key_summary_includes_version(cli, requests_mock, fs, monkeypatch):

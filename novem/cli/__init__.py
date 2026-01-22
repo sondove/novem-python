@@ -448,23 +448,55 @@ novem --init --profile {args["profile"]}\
             # If we can't read the keys list, proceed anyway (will fail at create if there's an issue)
             pass
 
-        # Create the key entry and write all fields
-        try:
-            novem.create(f"admin/keys/{key_id}")
-            novem.write(f"admin/keys/{key_id}/key", ssh_key)
+        # Create the key entry - use session directly to check response
+        api_root = novem._api_root
+        session = novem._session
 
-            # Set the name to the hostname
-            hostname = socket.gethostname()
-            novem.write(f"admin/keys/{key_id}/name", hostname)
-
-            # Set the summary
-            summary = f"{hostname} key created with novem cli v{__version__}"
-            novem.write(f"admin/keys/{key_id}/summary", summary)
-        except Exception as e:
-            print(f"Error: Failed to add SSH key: {e}", file=sys.stderr)
+        # Try to create the key entry (409 means it already exists, which is fine - we'll update it)
+        is_update = False
+        r = session.put(f"{api_root}admin/keys/{key_id}")
+        if r.status_code == 409 or (r.text and "already exist" in r.text.lower()):
+            is_update = True
+        elif not r.ok:
+            try:
+                err = r.json().get("message", r.text)
+            except Exception:
+                err = r.text
+            print(f"Error: Failed to create SSH key: {err}", file=sys.stderr)
             sys.exit(1)
 
-        print(f'{cl.OKGREEN} \u2713 {cl.ENDC}SSH key "{cl.OKCYAN}{key_id}{cl.ENDC}" added successfully')
+        # Write the key content
+        r = session.post(
+            f"{api_root}admin/keys/{key_id}/key",
+            headers={"Content-type": "text/plain"},
+            data=ssh_key.encode("utf-8"),
+        )
+        if not r.ok or (r.text and "Failure" in r.text) or (r.text and "Duplicate" in r.text):
+            try:
+                err = r.json().get("message", r.text)
+            except Exception:
+                err = r.text
+            print(f"Error: Failed to add SSH key: {err}", file=sys.stderr)
+            sys.exit(1)
+
+        # Set the name to the hostname
+        hostname = socket.gethostname()
+        session.post(
+            f"{api_root}admin/keys/{key_id}/name",
+            headers={"Content-type": "text/plain"},
+            data=hostname.encode("utf-8"),
+        )
+
+        # Set the summary
+        action = "updated" if is_update else "created"
+        summary = f"{hostname} key {action} with novem cli v{__version__}"
+        session.post(
+            f"{api_root}admin/keys/{key_id}/summary",
+            headers={"Content-type": "text/plain"},
+            data=summary.encode("utf-8"),
+        )
+
+        print(f'{cl.OKGREEN} \u2713 {cl.ENDC}SSH key "{cl.OKCYAN}{key_id}{cl.ENDC}" {action} successfully')
         return
 
     # handle --gql to run a GraphQL query from stdin, file, or inline
