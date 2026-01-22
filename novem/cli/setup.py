@@ -62,6 +62,18 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
     )
 
     parser.add_argument(
+        "--add-ssh-key",
+        dest="add_ssh_key",
+        action="store",
+        required=False,
+        nargs="?",
+        const=True,
+        default=False,
+        help="Add an SSH key for git access. Reads key from stdin. "
+        "Optional argument specifies key ID (defaults to lowercase hostname)",
+    )
+
+    parser.add_argument(
         "--dump",
         metavar=("OUT_PATH"),
         dest="dump",

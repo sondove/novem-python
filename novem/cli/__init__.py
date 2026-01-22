@@ -334,7 +334,6 @@ def run_cli_wrapped() -> None:
         Print some sytem information
         """
         import platform
-        import socket
 
         # TODO: use argument supplied config path instead
 
@@ -398,6 +397,74 @@ novem --init --profile {args["profile"]}\
         novem = NovemAPI(**args, is_cli=True)
         info = novem.read("/admin/profile/overview")
         print(info)
+        return
+
+    # handle --add-ssh-key to add an SSH key for git access
+    if args and args.get("add_ssh_key"):
+        if args.get("profile"):
+            args["config_profile"] = args["profile"]
+
+        key_arg = args["add_ssh_key"]
+
+        # Determine key_id: use argument if string, otherwise default to lowercase hostname
+        if isinstance(key_arg, str):
+            key_id = key_arg.lower()
+        else:
+            key_id = socket.gethostname().lower()
+
+        # Sanitize key_id: only lowercase alphanumeric, - and _ allowed
+        # Replace dots with dashes, strip other invalid characters
+        valid_chars = string.ascii_lowercase + string.digits + "-_"
+        key_id = key_id.replace(".", "-")
+        key_id = "".join(c for c in key_id if c in valid_chars)
+
+        # Check if stdin is a TTY (interactive terminal with no piped input)
+        if sys.stdin.isatty():
+            print("Error: No SSH key provided. Pipe your public key to stdin, e.g.:", file=sys.stderr)
+            print("  cat ~/.ssh/id_rsa.pub | novem --add-ssh-key", file=sys.stderr)
+            sys.exit(1)
+
+        # Read SSH key from stdin
+        ssh_key = sys.stdin.read().strip()
+        if not ssh_key:
+            print("Error: No SSH key provided on stdin", file=sys.stderr)
+            sys.exit(1)
+
+        novem = NovemAPI(**args, is_cli=True)
+
+        # Check if key_id already exists
+        try:
+            existing_keys = novem.read("admin/keys")
+            # The keys are returned as newline-separated list of key IDs
+            existing_key_ids = [k.strip() for k in existing_keys.strip().split("\n") if k.strip()]
+            if key_id in existing_key_ids:
+                print(
+                    f'Error: SSH key with id "{key_id}" already exists. '
+                    f"Please choose a different key id by passing it as an argument: --add-ssh-key <key_id>",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        except Exception:
+            # If we can't read the keys list, proceed anyway (will fail at create if there's an issue)
+            pass
+
+        # Create the key entry and write all fields
+        try:
+            novem.create(f"admin/keys/{key_id}")
+            novem.write(f"admin/keys/{key_id}/key", ssh_key)
+
+            # Set the name to the hostname
+            hostname = socket.gethostname()
+            novem.write(f"admin/keys/{key_id}/name", hostname)
+
+            # Set the summary
+            summary = f"{hostname} key created with novem cli v{__version__}"
+            novem.write(f"admin/keys/{key_id}/summary", summary)
+        except Exception as e:
+            print(f"Error: Failed to add SSH key: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f'{cl.OKGREEN} \u2713 {cl.ENDC}SSH key "{cl.OKCYAN}{key_id}{cl.ENDC}" added successfully')
         return
 
     # handle --gql to run a GraphQL query from stdin, file, or inline
