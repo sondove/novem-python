@@ -13,20 +13,13 @@ auth_req = {
 }
 
 
-def test_add_ssh_key_from_stdin(cli, requests_mock, fs, monkeypatch):
-    """Test --add-ssh-key reads key from stdin and creates key with hostname as id."""
+def test_add_ssh_key_from_stdin_with_comment(cli, requests_mock, fs, monkeypatch):
+    """Test --add-ssh-key uses SSH key comment for key_id and name."""
     write_config(auth_req)
 
-    # Mock hostname
     monkeypatch.setattr("socket.gethostname", lambda: "TestHost")
 
-    # Track API calls
     api_calls = []
-
-    def track_get(request, context):
-        api_calls.append(("GET", request.path))
-        # Return empty list of keys (no existing keys)
-        return ""
 
     def track_put(request, context):
         api_calls.append(("PUT", request.path))
@@ -36,30 +29,60 @@ def test_add_ssh_key_from_stdin(cli, requests_mock, fs, monkeypatch):
         api_calls.append(("POST", request.path, request.text))
         return ""
 
-    requests_mock.register_uri("GET", f"{API_ROOT}admin/keys", text=track_get)
+    # SSH key comment "test@example.com" becomes key_id "test-example-com"
+    requests_mock.register_uri("PUT", f"{API_ROOT}admin/keys/test-example-com", text=track_put)
+    requests_mock.register_uri("POST", f"{API_ROOT}admin/keys/test-example-com/key", text=track_post)
+    requests_mock.register_uri("POST", f"{API_ROOT}admin/keys/test-example-com/name", text=track_post)
+    requests_mock.register_uri("POST", f"{API_ROOT}admin/keys/test-example-com/summary", text=track_post)
+
+    ssh_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC... test@example.com"
+    out, err = cli("--add-ssh-key", stdin=ssh_key)
+
+    # Verify key_id derived from comment
+    assert ("PUT", "/v1/admin/keys/test-example-com") in api_calls
+    # Name should be the original comment
+    assert any(
+        call[0] == "POST" and call[1] == "/v1/admin/keys/test-example-com/name" and "test@example.com" in call[2]
+        for call in api_calls
+    )
+    # Summary should include hostname
+    assert any(
+        call[0] == "POST" and call[1] == "/v1/admin/keys/test-example-com/summary" and "TestHost" in call[2]
+        for call in api_calls
+    )
+
+    assert "test-example-com" in out
+    assert "successfully" in out
+
+
+def test_add_ssh_key_from_stdin_no_comment(cli, requests_mock, fs, monkeypatch):
+    """Test --add-ssh-key falls back to hostname when SSH key has no comment."""
+    write_config(auth_req)
+
+    monkeypatch.setattr("socket.gethostname", lambda: "TestHost")
+
+    api_calls = []
+
+    def track_put(request, context):
+        api_calls.append(("PUT", request.path))
+        return ""
+
+    def track_post(request, context):
+        api_calls.append(("POST", request.path, request.text))
+        return ""
+
+    # No comment in SSH key, should fall back to hostname
     requests_mock.register_uri("PUT", f"{API_ROOT}admin/keys/testhost", text=track_put)
     requests_mock.register_uri("POST", f"{API_ROOT}admin/keys/testhost/key", text=track_post)
     requests_mock.register_uri("POST", f"{API_ROOT}admin/keys/testhost/name", text=track_post)
     requests_mock.register_uri("POST", f"{API_ROOT}admin/keys/testhost/summary", text=track_post)
 
-    ssh_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC... test@example.com"
+    # SSH key without comment (only algo and key)
+    ssh_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..."
     out, err = cli("--add-ssh-key", stdin=ssh_key)
 
-    # Verify API calls were made in correct order
-    assert ("GET", "/v1/admin/keys") in api_calls
+    # Verify hostname used as key_id
     assert ("PUT", "/v1/admin/keys/testhost") in api_calls
-    assert any(
-        call[0] == "POST" and call[1] == "/v1/admin/keys/testhost/key" and ssh_key in call[2] for call in api_calls
-    )
-    assert any(
-        call[0] == "POST" and call[1] == "/v1/admin/keys/testhost/name" and "TestHost" in call[2] for call in api_calls
-    )
-    assert any(
-        call[0] == "POST" and call[1] == "/v1/admin/keys/testhost/summary" and "TestHost" in call[2]
-        for call in api_calls
-    )
-
-    # Verify success message
     assert "testhost" in out
     assert "successfully" in out
 
@@ -97,29 +120,6 @@ def test_add_ssh_key_with_custom_id(cli, requests_mock, fs, monkeypatch):
     assert ("PUT", "/v1/admin/keys/my-custom-key") in api_calls
     assert "my-custom-key" in out
     assert "successfully" in out
-
-
-def test_add_ssh_key_already_exists(cli, requests_mock, fs, monkeypatch):
-    """Test --add-ssh-key fails when key id already exists."""
-    write_config(auth_req)
-
-    monkeypatch.setattr("socket.gethostname", lambda: "TestHost")
-
-    def return_existing_keys(request, context):
-        # Return existing keys list
-        return "testhost\notherkey"
-
-    requests_mock.register_uri("GET", f"{API_ROOT}admin/keys", text=return_existing_keys)
-
-    ssh_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..."
-
-    with pytest.raises(CliExit) as e:
-        cli("--add-ssh-key", stdin=ssh_key)
-
-    out, err = e.value.args
-    assert e.value.code == 1
-    assert "already exists" in err
-    assert "testhost" in err
 
 
 def test_add_ssh_key_no_stdin(cli, requests_mock, fs, monkeypatch):
@@ -188,22 +188,18 @@ token = token2
 
     captured_tokens = []
 
-    def capture_get(request, context):
+    def capture_token(request, context):
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             captured_tokens.append(auth_header[7:])
         return ""
 
-    def capture_other(request, context):
-        return ""
-
     # Register mocks for both API roots
     for api_root in ["https://api1.test/v1/", "https://api2.test/v1/"]:
-        requests_mock.register_uri("GET", f"{api_root}admin/keys", text=capture_get)
-        requests_mock.register_uri("PUT", f"{api_root}admin/keys/testhost", text=capture_other)
-        requests_mock.register_uri("POST", f"{api_root}admin/keys/testhost/key", text=capture_other)
-        requests_mock.register_uri("POST", f"{api_root}admin/keys/testhost/name", text=capture_other)
-        requests_mock.register_uri("POST", f"{api_root}admin/keys/testhost/summary", text=capture_other)
+        requests_mock.register_uri("PUT", f"{api_root}admin/keys/testhost", text=capture_token)
+        requests_mock.register_uri("POST", f"{api_root}admin/keys/testhost/key", text=capture_token)
+        requests_mock.register_uri("POST", f"{api_root}admin/keys/testhost/name", text=capture_token)
+        requests_mock.register_uri("POST", f"{api_root}admin/keys/testhost/summary", text=capture_token)
 
     ssh_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..."
 
