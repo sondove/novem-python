@@ -334,7 +334,6 @@ def run_cli_wrapped() -> None:
         Print some sytem information
         """
         import platform
-        import socket
 
         # TODO: use argument supplied config path instead
 
@@ -398,6 +397,109 @@ novem --init --profile {args["profile"]}\
         novem = NovemAPI(**args, is_cli=True)
         info = novem.read("/admin/profile/overview")
         print(info)
+        return
+
+    # handle --add-ssh-key to add an SSH key for git access
+    if args and args.get("add_ssh_key"):
+        if args.get("profile"):
+            args["config_profile"] = args["profile"]
+
+        key_arg = args["add_ssh_key"]
+        hostname = socket.gethostname()
+
+        # Check if stdin is a TTY (interactive terminal with no piped input)
+        if sys.stdin.isatty():
+            print("Error: No SSH key provided. Pipe your public key to stdin, e.g.:", file=sys.stderr)
+            print("  cat ~/.ssh/id_rsa.pub | novem --add-ssh-key", file=sys.stderr)
+            sys.exit(1)
+
+        # Read SSH key from stdin
+        ssh_key = sys.stdin.read().strip()
+        if not ssh_key:
+            print("Error: No SSH key provided on stdin", file=sys.stderr)
+            sys.exit(1)
+
+        # Try to extract comment from SSH key (format: <algo> <key> <comment>)
+        # The comment is often something like "user@hostname"
+        ssh_key_comment: Optional[str] = None
+        ssh_key_parts = ssh_key.split()
+        if len(ssh_key_parts) >= 3:
+            ssh_key_comment = " ".join(ssh_key_parts[2:])
+
+        # Determine key_id and name:
+        # 1. If explicit argument provided, use that for key_id
+        # 2. Otherwise, if SSH key has a comment, use that
+        # 3. Fall back to hostname
+        if isinstance(key_arg, str):
+            key_id = key_arg.lower()
+            key_name = key_arg
+        elif ssh_key_comment:
+            key_id = ssh_key_comment.lower()
+            key_name = ssh_key_comment
+        else:
+            key_id = hostname.lower()
+            key_name = hostname
+
+        # Sanitize key_id: only lowercase alphanumeric, - and _ allowed
+        # Replace dots, @, and spaces with dashes, strip other invalid characters
+        valid_chars = string.ascii_lowercase + string.digits + "-_"
+        key_id = key_id.replace(".", "-").replace("@", "-").replace(" ", "-")
+        key_id = "".join(c for c in key_id if c in valid_chars)
+        # Collapse multiple dashes and strip leading/trailing dashes
+        while "--" in key_id:
+            key_id = key_id.replace("--", "-")
+        key_id = key_id.strip("-")
+
+        novem = NovemAPI(**args, is_cli=True)
+
+        # Create the key entry - use session directly to check response
+        api_root = novem._api_root
+        session = novem._session
+
+        # Try to create the key entry (409 means it already exists, which is fine - we'll update it)
+        is_update = False
+        r = session.put(f"{api_root}admin/keys/{key_id}")
+        if r.status_code == 409 or (r.text and "already exist" in r.text.lower()):
+            is_update = True
+        elif not r.ok:
+            try:
+                err = r.json().get("message", r.text)
+            except Exception:
+                err = r.text
+            print(f"Error: Failed to create SSH key: {err}", file=sys.stderr)
+            sys.exit(1)
+
+        # Write the key content
+        r = session.post(
+            f"{api_root}admin/keys/{key_id}/key",
+            headers={"Content-type": "text/plain"},
+            data=ssh_key.encode("utf-8"),
+        )
+        if not r.ok or (r.text and "Failure" in r.text) or (r.text and "Duplicate" in r.text):
+            try:
+                err = r.json().get("message", r.text)
+            except Exception:
+                err = r.text
+            print(f"Error: Failed to add SSH key: {err}", file=sys.stderr)
+            sys.exit(1)
+
+        # Set the name (from comment or hostname)
+        session.post(
+            f"{api_root}admin/keys/{key_id}/name",
+            headers={"Content-type": "text/plain"},
+            data=key_name.encode("utf-8"),
+        )
+
+        # Set the summary (include hostname since we're updating the key)
+        action = "updated" if is_update else "created"
+        summary = f"Key {action} from {hostname} with novem cli v{__version__}"
+        session.post(
+            f"{api_root}admin/keys/{key_id}/summary",
+            headers={"Content-type": "text/plain"},
+            data=summary.encode("utf-8"),
+        )
+
+        print(f'{cl.OKGREEN} \u2713 {cl.ENDC}SSH key "{cl.OKCYAN}{key_id}{cl.ENDC}" {action} successfully')
         return
 
     # handle --gql to run a GraphQL query from stdin, file, or inline
