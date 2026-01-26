@@ -98,6 +98,52 @@ class NovemVisAPI(NovemAPI):
         # start recurison
         rec_tree("")
 
+    def api_load(self, inpath: str) -> None:
+        """
+        Load a dumped folder structure back into the API.
+        Walks the folder and for each file: PUT to create, then POST content.
+        """
+
+        qpath = f"{self._api_root}vis/{self._vispath}/{self.id}"
+
+        if self.user:
+            print(f"you cannot modify another users {self._vispath}")
+            return
+
+        def load_tree(local_path: str, api_path: str) -> None:
+            full_local = os.path.join(inpath, local_path.lstrip("/")) if local_path else inpath
+
+            if os.path.isfile(full_local):
+                # Read file content
+                with open(full_local, "r") as f:
+                    content = f.read()
+
+                full_api = f"{qpath}{api_path}"
+
+                # Try PUT first to create the resource
+                r = self._session.put(full_api)
+                put_status = r.status_code
+
+                # POST the content
+                r = self._session.post(
+                    full_api,
+                    headers={"Content-type": "text/plain"},
+                    data=content.encode("utf-8"),
+                )
+                print(f"Loaded file:     {api_path} (PUT: {put_status}, POST: {r.status_code}, {len(content)} bytes)")
+
+            elif os.path.isdir(full_local):
+                print(f"Processing dir:  {api_path or '/'}")
+
+                # Iterate over directory contents
+                for entry in sorted(os.listdir(full_local)):
+                    entry_local = os.path.join(local_path, entry) if local_path else entry
+                    entry_api = f"{api_path}/{entry}"
+                    load_tree(entry_local, entry_api)
+
+        # Start loading from root
+        load_tree("", "")
+
     def api_tree(self, colors: bool = False, relpath: str = "/") -> str:
         """
         Iterate over the current id and print a "pretty" ascii tree
