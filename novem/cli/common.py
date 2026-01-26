@@ -131,6 +131,14 @@ class VisBase:
             vis.api_dump(outpath=path)
             return
 
+        # --load: load folder structure into API
+        if "load" in args and args["load"]:
+            path = args["load"]
+
+            print(f'Loading api tree structure from "{path}"')
+            vis.api_load(inpath=path)
+            return
+
         # if we detect a tree query then we'll discard all other IO
         if "tree" in args and args["tree"] != -1:
             path = args["tree"]
@@ -338,6 +346,13 @@ def job(args: Dict[str, Any]) -> None:
         path = args["dump"]
         print(f'Dumping api tree structure to "{path}"')
         j.api_dump(outpath=path)
+        return
+
+    # --load: load folder structure into API
+    if "load" in args and args["load"]:
+        path = args["load"]
+        print(f'Loading api tree structure from "{path}"')
+        j.api_load(inpath=path)
         return
 
     # --tree: print API tree structure

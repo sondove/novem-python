@@ -84,6 +84,16 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
     )
 
     parser.add_argument(
+        "--load",
+        metavar=("IN_PATH"),
+        dest="load",
+        action="store",
+        required=False,
+        default=None,
+        help=ap.SUPPRESS,
+    )
+
+    parser.add_argument(
         "--version",
         dest="version",
         action="store_true",
