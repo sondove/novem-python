@@ -346,20 +346,47 @@ class NovemJobAPI(NovemAPI):
 
             # if i am a file, write to disc
             if tp == "file":
+                # skip files with default values
+                if headers.get("x-nvm-default", "").lower() == "true":
+                    print(f"Skipping default: {fp}")
+                    return None
+                # ensure parent directory exists before writing
+                parent_dir = os.path.dirname(fp)
+                if parent_dir and not os.path.exists(parent_dir):
+                    os.makedirs(parent_dir, exist_ok=True)
+                    print(f"Creating folder: {parent_dir}")
                 with open(fp, "w") as f:
                     f.write(req.text)
                 print(f"Writing file:    {fp}")
                 return None
 
-            # if I am a folder, make a folder and recurse
-            os.makedirs(fp, exist_ok=True)
-            print(f"Creating folder: {fp}")
-
+            # if I am a folder, recurse without creating yet
             nodes: List[Dict[str, str]] = req.json()
 
-            # Recurse relevant structure
-            for r in [x for x in nodes if x["type"] not in ["system_file", "system_dir"]]:
-                rec_tree(f'{path}/{r["name"]}')
+            # Recurse relevant structure (skip system entries and read-only files)
+            for r in nodes:
+                if r["type"] in ["system_file", "system_dir"]:
+                    continue
+                child_path = f'{path}/{r["name"]}'
+                child_fp = f"{outpath}{child_path}"
+
+                # /shared/ and /tags/ are special markers - create empty files from listing
+                if r["type"] in ["file", "link"] and (
+                    child_path.startswith("/shared/") or child_path.startswith("/tags/")
+                ):
+                    parent_dir = os.path.dirname(child_fp)
+                    if parent_dir and not os.path.exists(parent_dir):
+                        os.makedirs(parent_dir, exist_ok=True)
+                        print(f"Creating folder: {parent_dir}")
+                    with open(child_fp, "w") as f:
+                        f.write("")
+                    print(f"Writing file:    {child_fp}")
+                    continue
+
+                # skip read-only files/links
+                if r["type"] in ["file", "link"] and "w" not in r.get("permissions", []):
+                    continue
+                rec_tree(child_path)
 
         # start recursion
         rec_tree("/")
