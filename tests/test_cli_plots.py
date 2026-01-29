@@ -285,14 +285,13 @@ def test_plot_list(cli, requests_mock, fs):
 
     def fav_fmt(markers, cl):
         fav_str = f"{cl.WARNING}*{cl.ENDC}" if "*" in markers else " "
-        like_str = f"{cl.OKBLUE}+{cl.ENDC}" if "+" in markers else " "
-        return f" {fav_str}{like_str} "
+        return f" {fav_str} "
 
     # construct our pretty print list
     ppo = [
         {
             "key": "fav",
-            "header": "    ",
+            "header": "   ",
             "type": "text",
             "fmt": fav_fmt,
             "overflow": "keep",
