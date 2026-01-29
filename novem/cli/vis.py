@@ -116,21 +116,36 @@ def list_vis(args: Dict[str, Any], type: str) -> None:
 
         return summary.replace("\n", "")
 
+    has_favs = any("*" in p.get("fav", "") for p in plist)
+    has_likes = any("+" in p.get("fav", "") for p in plist)
+
     def fav_fmt(markers: str, cl: cl) -> str:
-        fav_str = f"{cl.WARNING}*{cl.ENDFGC}" if "*" in markers else " "
-        like_str = f"{cl.OKBLUE}+{cl.ENDFGC}" if "+" in markers else " "
-        return f" {fav_str}{like_str} "
+        parts = ""
+        if has_favs:
+            parts += f"{cl.WARNING}*{cl.ENDFGC}" if "*" in markers else " "
+        if has_likes:
+            parts += f"{cl.OKBLUE}+{cl.ENDFGC}" if "+" in markers else " "
+        return f" {parts} " if parts else ""
+
+    fav_header_width = (1 if has_favs else 0) + (1 if has_likes else 0)
+    fav_header = (" " * (fav_header_width + 2)) if fav_header_width > 0 else ""
 
     ppo: List[Dict[str, Any]] = [
-        {
-            "key": "fav",
-            "header": "    ",
-            "type": "text",
-            "fmt": fav_fmt,
-            "overflow": "keep",
-            "no_border": True,
-            "no_padding": True,
-        },
+        *(
+            [
+                {
+                    "key": "fav",
+                    "header": fav_header,
+                    "type": "text",
+                    "fmt": fav_fmt,
+                    "overflow": "keep",
+                    "no_border": True,
+                    "no_padding": True,
+                },
+            ]
+            if has_favs or has_likes
+            else []
+        ),
         {
             "key": "id",
             "header": f"{type} ID",
@@ -744,21 +759,36 @@ def list_jobs(args: Dict[str, Any]) -> None:
             return f"{cl.WARNING}{status}{cl.ENDFGC}"
         return status
 
+    has_favs = any("*" in p.get("fav", "") for p in plist)
+    has_likes = any("+" in p.get("fav", "") for p in plist)
+
     def fav_fmt(markers: str, cl: cl) -> str:
-        fav_str = f"{cl.WARNING}*{cl.ENDFGC}" if "*" in markers else " "
-        like_str = f"{cl.OKBLUE}+{cl.ENDFGC}" if "+" in markers else " "
-        return f" {fav_str}{like_str} "
+        parts = ""
+        if has_favs:
+            parts += f"{cl.WARNING}*{cl.ENDFGC}" if "*" in markers else " "
+        if has_likes:
+            parts += f"{cl.OKBLUE}+{cl.ENDFGC}" if "+" in markers else " "
+        return f" {parts} " if parts else ""
+
+    fav_header_width = (1 if has_favs else 0) + (1 if has_likes else 0)
+    fav_header = (" " * (fav_header_width + 2)) if fav_header_width > 0 else ""
 
     ppo: List[Dict[str, Any]] = [
-        {
-            "key": "fav",
-            "header": "    ",
-            "type": "text",
-            "fmt": fav_fmt,
-            "overflow": "keep",
-            "no_border": True,
-            "no_padding": True,
-        },
+        *(
+            [
+                {
+                    "key": "fav",
+                    "header": fav_header,
+                    "type": "text",
+                    "fmt": fav_fmt,
+                    "overflow": "keep",
+                    "no_border": True,
+                    "no_padding": True,
+                },
+            ]
+            if has_favs or has_likes
+            else []
+        ),
         {
             "key": "id",
             "header": "Job ID",
@@ -1531,21 +1561,36 @@ def list_org_group_vis(args: Dict[str, Any], vis_type: str) -> None:
             return ""
         return summary.replace("\n", "")
 
+    has_favs = any("*" in p.get("fav", "") for p in plist)
+    has_likes = any("+" in p.get("fav", "") for p in plist)
+
     def fav_fmt(markers: str, _cl: Any) -> str:
-        fav_str = f"{cl.WARNING}*{cl.ENDFGC}" if "*" in markers else " "
-        like_str = f"{cl.OKBLUE}+{cl.ENDFGC}" if "+" in markers else " "
-        return f" {fav_str}{like_str} "
+        parts = ""
+        if has_favs:
+            parts += f"{cl.WARNING}*{cl.ENDFGC}" if "*" in markers else " "
+        if has_likes:
+            parts += f"{cl.OKBLUE}+{cl.ENDFGC}" if "+" in markers else " "
+        return f" {parts} " if parts else ""
+
+    fav_header_width = (1 if has_favs else 0) + (1 if has_likes else 0)
+    fav_header = (" " * (fav_header_width + 2)) if fav_header_width > 0 else ""
 
     ppo: List[Dict[str, Any]] = [
-        {
-            "key": "fav",
-            "header": "    ",
-            "type": "text",
-            "fmt": fav_fmt,
-            "overflow": "keep",
-            "no_border": True,
-            "no_padding": True,
-        },
+        *(
+            [
+                {
+                    "key": "fav",
+                    "header": fav_header,
+                    "type": "text",
+                    "fmt": fav_fmt,
+                    "overflow": "keep",
+                    "no_border": True,
+                    "no_padding": True,
+                },
+            ]
+            if has_favs or has_likes
+            else []
+        ),
         {
             "key": "username",
             "header": "Username",
