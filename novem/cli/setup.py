@@ -226,7 +226,7 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
         required=False,
         default="",
         nargs="?",
-        help="select a tag to operate on (fav, like, ignore, wip, archived, or +usertag), "
+        help="select a tag to operate on (fav, like, ignore, wip, archived, +usertag, or =categorytag), "
         "no parameter will list all current tags",
     )
 

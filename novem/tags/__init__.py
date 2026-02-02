@@ -17,10 +17,11 @@ def is_valid_tag(tag: str) -> bool:
     Valid tags are:
     - One of: fav, like, ignore, wip, archived
     - Any string starting with + (user tag)
+    - Any string starting with = (category tag)
     """
     if not tag:
         return False
-    return tag in VALID_TAGS or tag.startswith("+")
+    return tag in VALID_TAGS or tag.startswith("+") or tag.startswith("=")
 
 
 class NovemTags:
@@ -30,7 +31,7 @@ class NovemTags:
     Novem tags are exposed at:
       f"{api._api_root}{tag_path}/tags"
 
-    Valid tags are: fav, like, ignore, wip, archived, or any tag starting with + (user tag)
+    Valid tags are: fav, like, ignore, wip, archived, +usertag, or =categorytag
     """
 
     def __init__(self, api: "NovemAPI", tag_path: str) -> None:

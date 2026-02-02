@@ -348,6 +348,9 @@ def tag_pretty_print(iplist: List[Dict[str, str]], striped: bool = False) -> Non
         elif tag_name.startswith("+"):
             p["summary"] = "User-defined tag"
             p["type"] = "user"
+        elif tag_name.startswith("="):
+            p["summary"] = "Category tag"
+            p["type"] = "category"
         else:
             p["summary"] = "Custom tag"
             p["type"] = "custom"
