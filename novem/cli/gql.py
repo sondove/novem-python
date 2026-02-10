@@ -5,13 +5,16 @@ This module handles GraphQL queries for listing operations (plots, grids, mails,
 while the core data operations remain REST-based.
 """
 
+import datetime
 import json
 import re
+import shutil
+import textwrap
 from typing import Any, Dict, List, Optional, Set
 
 import requests
 
-from ..utils import API_ROOT, get_current_config
+from ..utils import API_ROOT, cl, colors, get_current_config, parse_api_datetime
 
 
 def _get_gql_endpoint(api_root: str) -> str:
@@ -1283,3 +1286,265 @@ def list_org_group_vis_gql(gql: NovemGQL, org_id: str, group_id: str, vis_type: 
     variables = {"orgId": org_id}
     data = gql._query(LIST_ORG_GROUP_VIS_QUERY, variables)
     return _transform_org_group_vis_response(data, group_id, vis_type)
+
+
+# --- Topics / Comments ---
+
+_COMMENT_FIELDS = """
+    comment_id
+    slug
+    message
+    depth
+    deleted
+    edited
+    num_replies
+    likes
+    dislikes
+    created
+    updated
+    creator { username }
+"""
+
+
+def _build_comment_fragment(depth: int = 4) -> str:
+    """Build a nested comment/replies fragment to the given depth."""
+    fragment = _COMMENT_FIELDS
+    for _ in range(depth):
+        fragment = f"""
+    {_COMMENT_FIELDS}
+    replies {{{fragment}
+    }}"""
+    return fragment
+
+
+_TOPICS_QUERY_TPL = """
+query GetTopics($id: ID!) {{
+  {vis_type}(id: $id) {{
+    topics {{
+      topic_id
+      slug
+      message
+      audience
+      status
+      num_comments
+      likes
+      dislikes
+      edited
+      created
+      updated
+      creator {{ username }}
+      comments {{{comment_fragment}
+      }}
+    }}
+  }}
+}}
+"""
+
+
+def _build_topics_query(vis_type: str) -> str:
+    """Build a topics query for a given vis type (plots, grids, mails, etc.)."""
+    comment_fragment = _build_comment_fragment(4)
+    return _TOPICS_QUERY_TPL.format(vis_type=vis_type, comment_fragment=comment_fragment)
+
+
+def fetch_topics_gql(gql: NovemGQL, vis_type: str, vis_id: str) -> List[Dict[str, Any]]:
+    """Fetch topics and comments for a visualisation."""
+    query = _build_topics_query(vis_type)
+    data = gql._query(query, {"id": vis_id})
+    items = data.get(vis_type, [])
+    if not items:
+        return []
+    return items[0].get("topics", [])
+
+
+def _relative_time(dt: datetime.datetime) -> str:
+    """Return a human-friendly relative time string."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    delta = now - dt
+    seconds = int(delta.total_seconds())
+
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    if days < 30:
+        return f"{days}d ago"
+    return dt.strftime("%b %d, %Y")
+
+
+def _visible_len(s: str) -> int:
+    """Return the visible length of a string, ignoring ANSI escape codes."""
+    return len(re.sub(r"\033\[[0-9;]*m", "", s))
+
+
+def _wrap_text(text: str, prefix: str, width: int) -> List[str]:
+    """Wrap text to fit within width, prepending prefix to each line."""
+    indent_width = _visible_len(prefix)
+    available = width - indent_width
+    if available < 20:
+        available = 20
+
+    result: List[str] = []
+    for line in text.splitlines():
+        if not line:
+            result.append(prefix)
+        else:
+            wrapped = textwrap.wrap(line, width=available) or [""]
+            for wl in wrapped:
+                result.append(f"{prefix}{wl}")
+    return result
+
+
+def _get_term_width() -> int:
+    """Get terminal width, capped at 120."""
+    return min(120, shutil.get_terminal_size().columns)
+
+
+def _render_comment(comment: Dict[str, Any], prefix: str, connector: str, child_prefix: str, width: int = 0) -> str:
+    """Render a single comment and its replies as a tree."""
+    if not width:
+        width = _get_term_width()
+
+    lines: List[str] = []
+
+    username = comment.get("creator", {}).get("username", "?")
+    message = comment.get("message", "") or ""
+    deleted = comment.get("deleted", False)
+    edited = comment.get("edited", False)
+    created_str = comment.get("created", "")
+
+    # Timestamp
+    ts = ""
+    dt = parse_api_datetime(created_str)
+    if dt:
+        ts = _relative_time(dt)
+
+    # Markers
+    markers: List[str] = []
+    if edited:
+        markers.append("edited")
+    if deleted:
+        markers.append("deleted")
+    marker_str = f" {cl.FGGRAY}({', '.join(markers)}){cl.ENDC}" if markers else ""
+
+    # Reactions
+    reactions: List[str] = []
+    likes = comment.get("likes", 0)
+    dislikes = comment.get("dislikes", 0)
+    if likes:
+        reactions.append(f"+{likes}")
+    if dislikes:
+        reactions.append(f"-{dislikes}")
+    reaction_str = f" {cl.FGGRAY}[{' '.join(reactions)}]{cl.ENDC}" if reactions else ""
+
+    # Header line
+    header = (
+        f"{prefix}{connector}"
+        f"{cl.OKCYAN}@{username}{cl.ENDC}"
+        f" {cl.FGGRAY}·{cl.ENDC} "
+        f"{cl.FGGRAY}{ts}{cl.ENDC}"
+        f"{marker_str}{reaction_str}"
+    )
+    lines.append(header)
+
+    # Message body
+    body_prefix = f"{prefix}{child_prefix}"
+    if deleted:
+        lines.append(f"{body_prefix}{cl.FGGRAY}[deleted]{cl.ENDC}")
+    elif message:
+        lines.extend(_wrap_text(message, body_prefix, width))
+
+    # Replies
+    replies = comment.get("replies", []) or []
+    for i, reply in enumerate(replies):
+        is_last = i == len(replies) - 1
+        rc = "└─ " if is_last else "├─ "
+        rp = "   " if is_last else "│  "
+        lines.append(_render_comment(reply, f"{prefix}{child_prefix}", rc, rp, width))
+
+    return "\n".join(lines)
+
+
+def render_topics(topics: List[Dict[str, Any]]) -> str:
+    """Render a list of topics with their comment trees."""
+    colors()
+
+    if not topics:
+        return f"{cl.FGGRAY}No topics{cl.ENDC}"
+
+    width = _get_term_width()
+    parts: List[str] = []
+
+    for topic in topics:
+        lines: List[str] = []
+
+        username = topic.get("creator", {}).get("username", "?")
+        message = topic.get("message", "") or ""
+        audience = topic.get("audience", "")
+        status = topic.get("status", "")
+        num_comments = topic.get("num_comments", 0)
+        edited = topic.get("edited", False)
+        created_str = topic.get("created", "")
+
+        # Timestamp
+        ts = ""
+        dt = parse_api_datetime(created_str)
+        if dt:
+            ts = _relative_time(dt)
+
+        # Metadata tags
+        tags: List[str] = []
+        if audience:
+            tags.append(audience)
+        if status and status != "active":
+            tags.append(status)
+        tag_str = f" {cl.FGGRAY}({', '.join(tags)}){cl.ENDC}" if tags else ""
+
+        # Reactions
+        reactions: List[str] = []
+        likes = topic.get("likes", 0)
+        dislikes = topic.get("dislikes", 0)
+        if likes:
+            reactions.append(f"+{likes}")
+        if dislikes:
+            reactions.append(f"-{dislikes}")
+        reaction_str = f" {cl.FGGRAY}[{' '.join(reactions)}]{cl.ENDC}" if reactions else ""
+
+        edited_str = f" {cl.FGGRAY}(edited){cl.ENDC}" if edited else ""
+
+        comment_count = f" {cl.FGGRAY}· {num_comments} comment{'s' if num_comments != 1 else ''}{cl.ENDC}"
+
+        # Topic header
+        header = (
+            f"{cl.BOLD}┌{cl.ENDC} "
+            f"{cl.OKCYAN}@{username}{cl.ENDC}"
+            f" {cl.FGGRAY}·{cl.ENDC} "
+            f"{cl.FGGRAY}{ts}{cl.ENDC}"
+            f"{tag_str}{edited_str}{reaction_str}{comment_count}"
+        )
+        lines.append(header)
+
+        # Topic body
+        body_prefix = f"{cl.BOLD}│{cl.ENDC} "
+        if message:
+            lines.extend(_wrap_text(message, body_prefix, width))
+
+        # Comments
+        comments = topic.get("comments", []) or []
+        for i, comment in enumerate(comments):
+            is_last = i == len(comments) - 1
+            connector = "├─ " if not is_last else "└─ "
+            child_prefix = "│  " if not is_last else "   "
+            lines.append(_render_comment(comment, body_prefix, connector, child_prefix, width))
+
+        if not comments:
+            lines.append(f"{cl.FGGRAY}(no comments){cl.ENDC}")
+
+        parts.append("\n".join(lines))
+
+    return "\n\n".join(parts)

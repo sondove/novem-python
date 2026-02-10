@@ -5,6 +5,7 @@ from typing import Any, Dict, Literal, Optional
 from novem import Grid, Job, Mail, Plot
 from novem.api_ref import Novem404, NovemAPI
 from novem.cli.editor import edit
+from novem.cli.gql import NovemGQL, fetch_topics_gql, render_topics
 from novem.cli.setup import Share, Tag
 from novem.cli.vis import (
     list_job_shares,
@@ -147,6 +148,13 @@ class VisBase:
 
             ts = vis.api_tree(colors=True, relpath=path)
             print(ts)
+            return
+
+        # --comments: show topics and comment threads
+        if args.get("comments"):
+            gql = NovemGQL(**args)
+            topics = fetch_topics_gql(gql, self.fragment, name)
+            print(render_topics(topics))
             return
 
         # if we have the -e or edit flag then this takes presedence over all other
