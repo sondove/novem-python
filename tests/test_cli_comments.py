@@ -11,8 +11,8 @@ from novem.cli.gql import (
     _wrap_text,
     render_topics,
 )
-from novem.cli.vis import _compact_num
-from novem.utils import API_ROOT
+from novem.cli.vis import _compact_num, _format_activity
+from novem.utils import API_ROOT, colors
 
 from .utils import write_config
 
@@ -519,3 +519,79 @@ class TestAggregateActivity:
             }
         )
         assert result == {"_comments": 5, "_likes": 5, "_dislikes": 2}
+
+
+# --- Unit tests for _format_activity alignment ---
+
+
+class TestFormatActivity:
+    def _plain(self, p: dict) -> str:
+        """Strip ANSI from the _activity value."""
+        return _strip_ansi(p["_activity"])
+
+    def test_all_zeros(self) -> None:
+        colors()
+        plist = [{"_comments": 0, "_likes": 0, "_dislikes": 0}]
+        _format_activity(plist)
+        assert self._plain(plist[0]) == "   - - -"  # padded to "Activity" width
+
+    def test_single_digits(self) -> None:
+        colors()
+        plist = [{"_comments": 1, "_likes": 2, "_dislikes": 3}]
+        _format_activity(plist)
+        assert self._plain(plist[0]) == "   1 2 3"  # padded to "Activity" width
+
+    def test_mixed_widths_align(self) -> None:
+        colors()
+        plist = [
+            {"_comments": 1, "_likes": 50, "_dislikes": 0},
+            {"_comments": 100, "_likes": 1, "_dislikes": 10},
+        ]
+        _format_activity(plist)
+        p0 = self._plain(plist[0])
+        p1 = self._plain(plist[1])
+        # All rows should have the same visible width
+        assert len(p0) == len(p1)
+        # Components right-aligned
+        assert p0 == "  1 50  -"
+        assert p1 == "100  1 10"
+
+    def test_thousands(self) -> None:
+        colors()
+        plist = [
+            {"_comments": 1000, "_likes": 50, "_dislikes": 0},
+            {"_comments": 1, "_likes": 10000, "_dislikes": 5},
+        ]
+        _format_activity(plist)
+        p0 = self._plain(plist[0])
+        p1 = self._plain(plist[1])
+        assert len(p0) == len(p1)
+        assert "1k" in p0
+        assert "10k" in p1
+
+    def test_millions(self) -> None:
+        colors()
+        plist = [
+            {"_comments": 1000000, "_likes": 1500000, "_dislikes": 100},
+            {"_comments": 50, "_likes": 1, "_dislikes": 10000000},
+        ]
+        _format_activity(plist)
+        p0 = self._plain(plist[0])
+        p1 = self._plain(plist[1])
+        assert len(p0) == len(p1)
+        assert "1M" in p0
+        assert "1.5M" in p0
+        assert "10M" in p1
+
+    def test_wide_values_no_header_padding(self) -> None:
+        """When values are wider than 'Activity', no extra padding needed."""
+        colors()
+        plist = [{"_comments": 10000, "_likes": 10000, "_dislikes": 10000}]
+        _format_activity(plist)
+        p = self._plain(plist[0])
+        assert p == "10k 10k 10k"  # 11 chars > 8 ("Activity"), no extra padding
+
+    def test_empty_list(self) -> None:
+        colors()
+        plist: list = []
+        _format_activity(plist)  # should not raise

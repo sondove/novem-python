@@ -39,6 +39,36 @@ def _compact_num(n: int) -> str:
     return f"{v:.1f}M".replace(".0M", "M")
 
 
+def _format_activity(plist: List[Dict[str, Any]]) -> None:
+    """Pre-format the _activity column with right-aligned components."""
+    # Compute compact strings for each row
+    rows = []
+    for p in plist:
+        c = _compact_num(p.get("_comments", 0))
+        lk = _compact_num(p.get("_likes", 0))
+        d = _compact_num(p.get("_dislikes", 0))
+        rows.append((c, lk, d))
+
+    if not rows:
+        return
+
+    # Max width per component
+    mc = max(len(r[0]) for r in rows)
+    ml = max(len(r[1]) for r in rows)
+    md = max(len(r[2]) for r in rows)
+
+    # Ensure total width is at least len("Activity") = 8
+    total = mc + 1 + ml + 1 + md
+    pad = max(0, 8 - total)
+    mc += pad  # add extra padding to leftmost component
+
+    for p, (c, lk, d) in zip(plist, rows):
+        cs = c.rjust(mc)
+        ls = lk.rjust(ml)
+        ds = d.rjust(md)
+        p["_activity"] = f"{cs} {cl.OKBLUE}{ls}{cl.ENDFGC} {cl.FAIL}{ds}{cl.ENDFGC}"
+
+
 def list_vis(args: Dict[str, Any], type: str) -> None:
     colors()
     # get current plot list
@@ -219,10 +249,7 @@ def list_vis(args: Dict[str, Any], type: str) -> None:
         if dt:
             p["updated"] = format_datetime_local(dt)
 
-        c = _compact_num(p.get("_comments", 0))
-        lk = _compact_num(p.get("_likes", 0))
-        d = _compact_num(p.get("_dislikes", 0))
-        p["_activity"] = f"{c} {cl.OKBLUE}{lk}{cl.ENDFGC} {cl.FAIL}{d}{cl.ENDFGC}"
+    _format_activity(plist)
 
     striped: bool = config.get("cli_striped", False)
     ppl = pretty_format(plist, ppo, striped=striped)
@@ -916,11 +943,7 @@ def list_jobs(args: Dict[str, Any]) -> None:
         # Last run - format last_run_time as relative time
         p["_last_run"] = _format_time_ago(p.get("last_run_time", ""))
 
-        # Activity
-        c = _compact_num(p.get("_comments", 0))
-        lk = _compact_num(p.get("_likes", 0))
-        d = _compact_num(p.get("_dislikes", 0))
-        p["_activity"] = f"{c} {cl.OKBLUE}{lk}{cl.ENDFGC} {cl.FAIL}{d}{cl.ENDFGC}"
+    _format_activity(plist)
 
     # Calculate max widths for right-aligned columns (must be at least header width)
     max_steps = max(max((len(p["_steps"]) for p in plist), default=0), len("Steps"))
