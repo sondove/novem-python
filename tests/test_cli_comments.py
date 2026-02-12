@@ -126,17 +126,17 @@ class TestBuildCommentFragment:
 class TestBuildTopicsQuery:
     def test_plots_query(self) -> None:
         q = _build_topics_query("plots")
-        assert "plots(id: $id)" in q
+        assert "plots(id: $id, author: $author)" in q
         assert "topics {" in q
         assert "comments {" in q
 
     def test_grids_query(self) -> None:
         q = _build_topics_query("grids")
-        assert "grids(id: $id)" in q
+        assert "grids(id: $id, author: $author)" in q
 
     def test_mails_query(self) -> None:
         q = _build_topics_query("mails")
-        assert "mails(id: $id)" in q
+        assert "mails(id: $id, author: $author)" in q
 
 
 # --- Unit tests for render_topics ---
@@ -423,7 +423,7 @@ def test_comments_sends_correct_gql_query(cli, requests_mock, fs) -> None:
     cli("-p", "test_chart", "--comments")
 
     assert captured_query is not None
-    assert "plots(id: $id)" in captured_query
+    assert "plots(id: $id, author: $author)" in captured_query
     assert "topics" in captured_query
     assert "comments" in captured_query
 
@@ -446,7 +446,7 @@ def test_comments_grid(cli, requests_mock, fs) -> None:
     out, err = cli("-g", "my_grid", "--comments")
     assert "No topics" in out
     assert captured_query is not None
-    assert "grids(id: $id)" in captured_query
+    assert "grids(id: $id, author: $author)" in captured_query
 
 
 def test_comments_mail(cli, requests_mock, fs) -> None:

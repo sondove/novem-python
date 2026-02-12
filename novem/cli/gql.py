@@ -1300,6 +1300,7 @@ _COMMENT_FIELDS = """
     num_replies
     likes
     dislikes
+    my_reaction
     created
     updated
     creator { username }
@@ -1318,8 +1319,8 @@ def _build_comment_fragment(depth: int = 4) -> str:
 
 
 _TOPICS_QUERY_TPL = """
-query GetTopics($id: ID!) {{
-  {vis_type}(id: $id) {{
+query GetTopics($id: ID!, $author: String) {{
+  {vis_type}(id: $id, author: $author) {{
     topics {{
       topic_id
       slug
@@ -1329,6 +1330,7 @@ query GetTopics($id: ID!) {{
       num_comments
       likes
       dislikes
+      my_reaction
       edited
       created
       updated
@@ -1347,10 +1349,13 @@ def _build_topics_query(vis_type: str) -> str:
     return _TOPICS_QUERY_TPL.format(vis_type=vis_type, comment_fragment=comment_fragment)
 
 
-def fetch_topics_gql(gql: NovemGQL, vis_type: str, vis_id: str) -> List[Dict[str, Any]]:
+def fetch_topics_gql(gql: NovemGQL, vis_type: str, vis_id: str, author: Optional[str] = None) -> List[Dict[str, Any]]:
     """Fetch topics and comments for a visualisation."""
     query = _build_topics_query(vis_type)
-    data = gql._query(query, {"id": vis_id})
+    variables: Dict[str, Any] = {"id": vis_id}
+    if author:
+        variables["author"] = author
+    data = gql._query(query, variables)
     items = data.get(vis_type, [])
     if not items:
         return []

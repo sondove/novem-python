@@ -152,8 +152,10 @@ class VisBase:
 
         # --comments: show topics and comment threads
         if args.get("comments"):
+            if "profile" in args and args["profile"]:
+                args["config_profile"] = args["profile"]
             gql = NovemGQL(**args)
-            topics = fetch_topics_gql(gql, self.fragment, name)
+            topics = fetch_topics_gql(gql, self.fragment, name, author=usr)
             print(render_topics(topics))
             return
 
