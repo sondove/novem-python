@@ -156,7 +156,8 @@ class VisBase:
                 args["config_profile"] = args["profile"]
             gql = NovemGQL(**args)
             topics = fetch_topics_gql(gql, self.fragment, name, author=usr)
-            print(render_topics(topics))
+            me = gql._config.get("username", "")
+            print(render_topics(topics, me=me))
             return
 
         # if we have the -e or edit flag then this takes presedence over all other

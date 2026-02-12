@@ -379,6 +379,55 @@ class TestRenderTopics:
         for line in lines:
             assert line.strip() != "" or line == ""  # Allow only between topics
 
+    def test_me_topic_creator_highlighted(self) -> None:
+        """Current user's username in topic header should use WARNING color."""
+        colors()
+        from novem.utils import cl
+
+        topics = [_make_topic(username="alice")]
+        result = render_topics(topics, me="alice")
+        # The topic creator should be colored with WARNING (orange)
+        assert f"{cl.WARNING}@alice{cl.ENDC}" in result
+
+    def test_me_comment_creator_highlighted(self) -> None:
+        """Current user's username in comment header should use WARNING color."""
+        colors()
+        from novem.utils import cl
+
+        comment = _make_comment(username="alice", message="My comment")
+        topics = [_make_topic(username="bob", num_comments=1, comments=[comment])]
+        result = render_topics(topics, me="alice")
+        # Comment by "me" should be orange
+        assert f"{cl.WARNING}@alice{cl.ENDC}" in result
+        # Topic by someone else should be cyan
+        assert f"{cl.OKCYAN}@bob{cl.ENDC}" in result
+
+    def test_me_nested_reply_highlighted(self) -> None:
+        """Current user's username in nested reply should use WARNING color."""
+        colors()
+        from novem.utils import cl
+
+        reply = _make_comment(comment_id=2, username="alice", message="My reply", depth=1)
+        comment = _make_comment(comment_id=1, username="bob", message="Top", replies=[reply])
+        topics = [_make_topic(username="carol", num_comments=2, comments=[comment])]
+        result = render_topics(topics, me="alice")
+        assert f"{cl.WARNING}@alice{cl.ENDC}" in result
+        assert f"{cl.OKCYAN}@bob{cl.ENDC}" in result
+        assert f"{cl.OKCYAN}@carol{cl.ENDC}" in result
+
+    def test_no_me_all_cyan(self) -> None:
+        """When me is empty, all usernames should use OKCYAN."""
+        colors()
+        from novem.utils import cl
+
+        comment = _make_comment(username="bob")
+        topics = [_make_topic(username="alice", num_comments=1, comments=[comment])]
+        result = render_topics(topics, me="")
+        assert f"{cl.OKCYAN}@alice{cl.ENDC}" in result
+        assert f"{cl.OKCYAN}@bob{cl.ENDC}" in result
+        # WARNING escape code should not appear (check raw code, not cl.WARNING which may be empty)
+        assert "\033[93m" not in result
+
 
 # --- CLI integration tests ---
 

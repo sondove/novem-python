@@ -1467,7 +1467,9 @@ def _get_term_width() -> int:
     return min(120, shutil.get_terminal_size().columns)
 
 
-def _render_comment(comment: Dict[str, Any], prefix: str, connector: str, child_prefix: str, width: int = 0) -> str:
+def _render_comment(
+    comment: Dict[str, Any], prefix: str, connector: str, child_prefix: str, width: int = 0, me: str = ""
+) -> str:
     """Render a single comment and its replies as a tree."""
     if not width:
         width = _get_term_width()
@@ -1505,9 +1507,10 @@ def _render_comment(comment: Dict[str, Any], prefix: str, connector: str, child_
     reaction_str = f" {cl.FGGRAY}[{' '.join(reactions)}]{cl.ENDC}" if reactions else ""
 
     # Header line
+    user_color = cl.WARNING if me and username == me else cl.OKCYAN
     header = (
         f"{prefix}{connector}"
-        f"{cl.OKCYAN}@{username}{cl.ENDC}"
+        f"{user_color}@{username}{cl.ENDC}"
         f" {cl.FGGRAY}·{cl.ENDC} "
         f"{cl.FGGRAY}{ts}{cl.ENDC}"
         f"{marker_str}{reaction_str}"
@@ -1527,12 +1530,12 @@ def _render_comment(comment: Dict[str, Any], prefix: str, connector: str, child_
         is_last = i == len(replies) - 1
         rc = "└ " if is_last else "├ "
         rp = "  " if is_last else "│ "
-        lines.append(_render_comment(reply, f"{prefix}{child_prefix}", rc, rp, width))
+        lines.append(_render_comment(reply, f"{prefix}{child_prefix}", rc, rp, width, me=me))
 
     return "\n".join(lines)
 
 
-def render_topics(topics: List[Dict[str, Any]]) -> str:
+def render_topics(topics: List[Dict[str, Any]], me: str = "") -> str:
     """Render a list of topics with their comment trees."""
     colors()
 
@@ -1582,9 +1585,10 @@ def render_topics(topics: List[Dict[str, Any]]) -> str:
         comment_count = f" {cl.FGGRAY}· {num_comments} comment{'s' if num_comments != 1 else ''}{cl.ENDC}"
 
         # Topic header
+        user_color = cl.WARNING if me and username == me else cl.OKCYAN
         header = (
             f"{cl.BOLD}┌{cl.ENDC} "
-            f"{cl.OKCYAN}@{username}{cl.ENDC}"
+            f"{user_color}@{username}{cl.ENDC}"
             f" {cl.FGGRAY}·{cl.ENDC} "
             f"{cl.FGGRAY}{ts}{cl.ENDC}"
             f"{tag_str}{edited_str}{reaction_str}{comment_count}"
@@ -1602,7 +1606,7 @@ def render_topics(topics: List[Dict[str, Any]]) -> str:
             is_last = i == len(comments) - 1
             connector = "├ " if not is_last else "└ "
             child_prefix = "│ " if not is_last else "  "
-            lines.append(_render_comment(comment, body_prefix, connector, child_prefix, width))
+            lines.append(_render_comment(comment, body_prefix, connector, child_prefix, width, me=me))
 
         if not comments:
             lines.append(f"{cl.BOLD}└{cl.ENDC} {cl.FGGRAY}(no comments){cl.ENDC}")
