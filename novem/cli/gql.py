@@ -1548,8 +1548,14 @@ def render_topics(topics: List[Dict[str, Any]]) -> str:
             lines.append(_render_comment(comment, body_prefix, connector, child_prefix, width))
 
         if not comments:
-            lines.append(f"{cl.FGGRAY}(no comments){cl.ENDC}")
+            lines.append(f"{cl.BOLD}└{cl.ENDC} {cl.FGGRAY}(no comments){cl.ENDC}")
 
-        parts.append("\n".join(lines))
+        # Cap the last line: replace topic-level bold │ with bold └
+        topic_text = "\n".join(lines)
+        all_lines = topic_text.split("\n")
+        bold_pipe = f"{cl.BOLD}│{cl.ENDC}"
+        bold_cap = f"{cl.BOLD}└{cl.ENDC}"
+        all_lines[-1] = all_lines[-1].replace(bold_pipe, bold_cap, 1)
+        parts.append("\n".join(all_lines))
 
     return "\n\n".join(parts)
