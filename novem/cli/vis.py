@@ -75,6 +75,18 @@ def _format_activity(plist: List[Dict[str, Any]]) -> None:
         p["_activity"] = f"{cs}{s1}{cl.OKBLUE}{ls}{cl.ENDFGC}{s2}{cl.FAIL}{ds}{cl.ENDFGC}"
 
 
+def _format_views(plist: List[Dict[str, Any]]) -> None:
+    """Pre-format the _views column as a right-aligned compact number."""
+    if not plist:
+        return
+
+    rows = [_compact_num(p.get("_views", 0)) for p in plist]
+    mw = max(max(len(r) for r in rows), len("Views"))
+
+    for p, r in zip(plist, rows):
+        p["_views_fmt"] = r.rjust(mw)
+
+
 def list_vis(args: Dict[str, Any], type: str) -> None:
     colors()
     # get current plot list
@@ -224,6 +236,12 @@ def list_vis(args: Dict[str, Any], type: str) -> None:
             "overflow": "keep",
         },
         {
+            "key": "_views_fmt",
+            "header": "Views",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
             "key": "name",
             "header": "Name",
             "type": "text",
@@ -256,6 +274,7 @@ def list_vis(args: Dict[str, Any], type: str) -> None:
             p["updated"] = format_datetime_local(dt)
 
     _format_activity(plist)
+    _format_views(plist)
 
     striped: bool = config.get("cli_striped", False)
     ppl = pretty_format(plist, ppo, striped=striped)
@@ -897,6 +916,12 @@ def list_jobs(args: Dict[str, Any]) -> None:
             "overflow": "keep",
         },
         {
+            "key": "_views_fmt",
+            "header": "Views",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
             "key": "triggers",
             "header": "Trigger",
             "type": "text",
@@ -950,6 +975,7 @@ def list_jobs(args: Dict[str, Any]) -> None:
         p["_last_run"] = _format_time_ago(p.get("last_run_time", ""))
 
     _format_activity(plist)
+    _format_views(plist)
 
     # Calculate max widths for right-aligned columns (must be at least header width)
     max_steps = max(max((len(p["_steps"]) for p in plist), default=0), len("Steps"))

@@ -12,7 +12,7 @@ from novem.cli.gql import (
     _wrap_text,
     render_topics,
 )
-from novem.cli.vis import _compact_num, _format_activity
+from novem.cli.vis import _compact_num, _format_activity, _format_views
 from novem.utils import API_ROOT, colors
 
 from .utils import write_config
@@ -827,3 +827,47 @@ class TestFormatActivity:
         colors()
         plist: list = []
         _format_activity(plist)  # should not raise
+
+
+# --- Unit tests for _format_views ---
+
+
+class TestFormatViews:
+    def test_zero_views(self) -> None:
+        colors()
+        plist = [{"_views": 0}]
+        _format_views(plist)
+        assert plist[0]["_views_fmt"].strip() == "-"
+
+    def test_small_views(self) -> None:
+        colors()
+        plist = [{"_views": 42}]
+        _format_views(plist)
+        assert plist[0]["_views_fmt"].strip() == "42"
+
+    def test_thousands(self) -> None:
+        colors()
+        plist = [{"_views": 1200}]
+        _format_views(plist)
+        assert plist[0]["_views_fmt"].strip() == "1.2k"
+
+    def test_right_aligned(self) -> None:
+        colors()
+        plist = [{"_views": 5}, {"_views": 1200}]
+        _format_views(plist)
+        # Both should have same width (right-aligned)
+        assert len(plist[0]["_views_fmt"]) == len(plist[1]["_views_fmt"])
+        assert plist[0]["_views_fmt"].endswith("5")
+        assert plist[1]["_views_fmt"].endswith("1.2k")
+
+    def test_min_header_width(self) -> None:
+        """Column should be at least as wide as 'Views' (5 chars)."""
+        colors()
+        plist = [{"_views": 1}]
+        _format_views(plist)
+        assert len(plist[0]["_views_fmt"]) >= len("Views")
+
+    def test_empty_list(self) -> None:
+        colors()
+        plist: list = []
+        _format_views(plist)  # should not raise

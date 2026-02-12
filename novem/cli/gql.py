@@ -107,6 +107,9 @@ query ListVis($author: String, $limit: Int, $offset: Int) {
       name
       type
     }
+    social {
+      views
+    }
     topics {
       num_comments
       num_likes
@@ -135,6 +138,9 @@ query ListGrids($author: String, $limit: Int, $offset: Int) {
       id
       name
       type
+    }
+    social {
+      views
     }
     topics {
       num_comments
@@ -165,6 +171,9 @@ query ListMails($author: String, $limit: Int, $offset: Int) {
       name
       type
     }
+    social {
+      views
+    }
     topics {
       num_comments
       num_likes
@@ -193,6 +202,9 @@ query ListJobs($author: String, $limit: Int, $offset: Int) {
       id
       name
       type
+    }
+    social {
+      views
     }
     topics {
       num_comments
@@ -321,6 +333,7 @@ def _transform_vis_response(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             "updated": item.get("updated", ""),
             "shared": _transform_shared(item.get("public", False), item.get("shared", [])),
             "fav": _get_markers(item.get("tags", [])),
+            "_views": (item.get("social") or {}).get("views", 0),
             **_aggregate_activity(item),
         }
         result.append(transformed)
@@ -384,6 +397,7 @@ def _transform_jobs_response(items: List[Dict[str, Any]]) -> List[Dict[str, Any]
             "updated": item.get("updated", ""),
             "shared": _transform_shared(item.get("public", False), item.get("shared", [])),
             "fav": _get_markers(item.get("tags", [])),
+            "_views": (item.get("social") or {}).get("views", 0),
             "last_run_status": item.get("last_run_status", ""),
             "last_run_time": item.get("last_run_time", ""),
             "run_count": item.get("run_count", 0),
