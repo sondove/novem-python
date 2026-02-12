@@ -107,6 +107,11 @@ query ListVis($author: String, $limit: Int, $offset: Int) {
       name
       type
     }
+    topics {
+      num_comments
+      likes
+      dislikes
+    }
   }
 }
 """
@@ -130,6 +135,11 @@ query ListGrids($author: String, $limit: Int, $offset: Int) {
       id
       name
       type
+    }
+    topics {
+      num_comments
+      likes
+      dislikes
     }
   }
 }
@@ -155,6 +165,11 @@ query ListMails($author: String, $limit: Int, $offset: Int) {
       name
       type
     }
+    topics {
+      num_comments
+      likes
+      dislikes
+    }
   }
 }
 """
@@ -178,6 +193,11 @@ query ListJobs($author: String, $limit: Int, $offset: Int) {
       id
       name
       type
+    }
+    topics {
+      num_comments
+      likes
+      dislikes
     }
     last_run_status
     last_run_time
@@ -271,6 +291,16 @@ def _get_markers(tags: List[Dict[str, Any]]) -> str:
     return fav + like
 
 
+def _aggregate_activity(item: Dict[str, Any]) -> Dict[str, int]:
+    """Sum topic-level comments, likes, and dislikes for a visualization."""
+    topics = item.get("topics", []) or []
+    return {
+        "_comments": sum(t.get("num_comments", 0) for t in topics),
+        "_likes": sum(t.get("likes", 0) for t in topics),
+        "_dislikes": sum(t.get("dislikes", 0) for t in topics),
+    }
+
+
 def _transform_vis_response(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Transform GraphQL visualization response to match REST format.
@@ -291,6 +321,7 @@ def _transform_vis_response(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             "updated": item.get("updated", ""),
             "shared": _transform_shared(item.get("public", False), item.get("shared", [])),
             "fav": _get_markers(item.get("tags", [])),
+            **_aggregate_activity(item),
         }
         result.append(transformed)
     return result
@@ -360,6 +391,7 @@ def _transform_jobs_response(items: List[Dict[str, Any]]) -> List[Dict[str, Any]
             "current_step": item.get("current_step"),
             "schedule": item.get("schedule", ""),
             "triggers": item.get("triggers", []),
+            **_aggregate_activity(item),
         }
         result.append(transformed)
     return result

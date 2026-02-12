@@ -2,6 +2,7 @@ import json
 import re
 
 from novem.cli.gql import (
+    _aggregate_activity,
     _build_comment_fragment,
     _build_topics_query,
     _get_gql_endpoint,
@@ -10,6 +11,7 @@ from novem.cli.gql import (
     _wrap_text,
     render_topics,
 )
+from novem.cli.vis import _compact_num
 from novem.utils import API_ROOT
 
 from .utils import write_config
@@ -461,3 +463,59 @@ def test_comments_mail(cli, requests_mock, fs) -> None:
 
     out, err = cli("-m", "my_mail", "--comments")
     assert "No topics" in out
+
+
+# --- Unit tests for _compact_num ---
+
+
+class TestCompactNum:
+    def test_zero(self) -> None:
+        assert _compact_num(0) == "-"
+
+    def test_small(self) -> None:
+        assert _compact_num(1) == "1"
+        assert _compact_num(42) == "42"
+        assert _compact_num(999) == "999"
+
+    def test_thousands(self) -> None:
+        assert _compact_num(1000) == "1k"
+        assert _compact_num(1200) == "1.2k"
+        assert _compact_num(1050) == "1.1k"
+        assert _compact_num(9999) == "10k"
+        assert _compact_num(10000) == "10k"
+        assert _compact_num(99999) == "100k"
+
+    def test_large(self) -> None:
+        assert _compact_num(100000) == "100k"
+        assert _compact_num(999999) == "999k"
+        assert _compact_num(1000000) == "1M"
+        assert _compact_num(1500000) == "1.5M"
+        assert _compact_num(10000000) == "10M"
+
+
+# --- Unit tests for _aggregate_activity ---
+
+
+class TestAggregateActivity:
+    def test_no_topics(self) -> None:
+        result = _aggregate_activity({})
+        assert result == {"_comments": 0, "_likes": 0, "_dislikes": 0}
+
+    def test_empty_topics(self) -> None:
+        result = _aggregate_activity({"topics": []})
+        assert result == {"_comments": 0, "_likes": 0, "_dislikes": 0}
+
+    def test_single_topic(self) -> None:
+        result = _aggregate_activity({"topics": [{"num_comments": 5, "likes": 3, "dislikes": 1}]})
+        assert result == {"_comments": 5, "_likes": 3, "_dislikes": 1}
+
+    def test_multiple_topics(self) -> None:
+        result = _aggregate_activity(
+            {
+                "topics": [
+                    {"num_comments": 2, "likes": 1, "dislikes": 0},
+                    {"num_comments": 3, "likes": 4, "dislikes": 2},
+                ]
+            }
+        )
+        assert result == {"_comments": 5, "_likes": 5, "_dislikes": 2}

@@ -24,6 +24,21 @@ from .gql import (
 )
 
 
+def _compact_num(n: int) -> str:
+    """Format a number compactly: 0→'-', 1–999 as-is, 1k, 1.2k, 1M, etc."""
+    if not n:
+        return "-"
+    if n < 1000:
+        return str(n)
+    if n < 100_000:
+        v = n / 1000
+        return f"{v:.1f}k".replace(".0k", "k")
+    if n < 1_000_000:
+        return f"{n // 1000}k"
+    v = n / 1_000_000
+    return f"{v:.1f}M".replace(".0M", "M")
+
+
 def list_vis(args: Dict[str, Any], type: str) -> None:
     colors()
     # get current plot list
@@ -167,6 +182,12 @@ def list_vis(args: Dict[str, Any], type: str) -> None:
             "overflow": "keep",
         },
         {
+            "key": "_activity",
+            "header": "Activity",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
             "key": "name",
             "header": "Name",
             "type": "text",
@@ -197,6 +218,11 @@ def list_vis(args: Dict[str, Any], type: str) -> None:
         dt = parse_api_datetime(p["updated"])
         if dt:
             p["updated"] = format_datetime_local(dt)
+
+        c = _compact_num(p.get("_comments", 0))
+        lk = _compact_num(p.get("_likes", 0))
+        d = _compact_num(p.get("_dislikes", 0))
+        p["_activity"] = f"{c} {cl.OKBLUE}{lk}{cl.ENDFGC} {cl.FAIL}{d}{cl.ENDFGC}"
 
     striped: bool = config.get("cli_striped", False)
     ppl = pretty_format(plist, ppo, striped=striped)
@@ -832,6 +858,12 @@ def list_jobs(args: Dict[str, Any]) -> None:
             "overflow": "keep",
         },
         {
+            "key": "_activity",
+            "header": "Activity",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
             "key": "triggers",
             "header": "Trigger",
             "type": "text",
@@ -883,6 +915,12 @@ def list_jobs(args: Dict[str, Any]) -> None:
 
         # Last run - format last_run_time as relative time
         p["_last_run"] = _format_time_ago(p.get("last_run_time", ""))
+
+        # Activity
+        c = _compact_num(p.get("_comments", 0))
+        lk = _compact_num(p.get("_likes", 0))
+        d = _compact_num(p.get("_dislikes", 0))
+        p["_activity"] = f"{c} {cl.OKBLUE}{lk}{cl.ENDFGC} {cl.FAIL}{d}{cl.ENDFGC}"
 
     # Calculate max widths for right-aligned columns (must be at least header width)
     max_steps = max(max((len(p["_steps"]) for p in plist), default=0), len("Steps"))

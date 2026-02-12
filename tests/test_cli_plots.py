@@ -4,7 +4,8 @@ from functools import partial
 import pytest
 
 from novem.cli.gql import _get_gql_endpoint
-from novem.utils import API_ROOT, format_datetime_local, parse_api_datetime, pretty_format
+from novem.cli.vis import _compact_num
+from novem.utils import API_ROOT, cl, colors, format_datetime_local, parse_api_datetime, pretty_format
 from tests.conftest import CliExit
 
 from .utils import write_config
@@ -318,6 +319,12 @@ def test_plot_list(cli, requests_mock, fs):
             "overflow": "keep",
         },
         {
+            "key": "_activity",
+            "header": "Activity",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
             "key": "name",
             "header": "Name",
             "type": "text",
@@ -343,11 +350,16 @@ def test_plot_list(cli, requests_mock, fs):
             "overflow": "truncate",
         },
     ]
+    colors()
     plist = user_plot_list
     for p in plist:
         dt = parse_api_datetime(p["updated"])
         if dt:
             p["updated"] = format_datetime_local(dt)
+        c = _compact_num(p.get("_comments", 0))
+        lk = _compact_num(p.get("_likes", 0))
+        d = _compact_num(p.get("_dislikes", 0))
+        p["_activity"] = f"{c} {cl.OKBLUE}{lk}{cl.ENDFGC} {cl.FAIL}{d}{cl.ENDFGC}"
 
     ppl = pretty_format(plist, ppo)
 
