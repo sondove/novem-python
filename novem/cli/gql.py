@@ -307,7 +307,7 @@ def _aggregate_activity(item: Dict[str, Any]) -> Dict[str, int]:
     """Sum topic-level comments, likes, and dislikes for a visualization."""
     topics = item.get("topics", []) or []
     return {
-        "_comments": sum(t.get("num_comments", 0) for t in topics),
+        "_comments": sum(t.get("num_comments", 0) for t in topics) + len(topics),
         "_likes": sum(t.get("num_likes", 0) for t in topics),
         "_dislikes": sum(t.get("num_dislikes", 0) for t in topics),
     }
