@@ -40,7 +40,7 @@ def _compact_num(n: int) -> str:
 
 
 def _format_activity(plist: List[Dict[str, Any]]) -> None:
-    """Pre-format the _activity column with right-aligned components."""
+    """Pre-format the _activity column with right-aligned, evenly-spaced components."""
     # Compute compact strings for each row
     rows = []
     for p in plist:
@@ -57,16 +57,22 @@ def _format_activity(plist: List[Dict[str, Any]]) -> None:
     ml = max(len(r[1]) for r in rows)
     md = max(len(r[2]) for r in rows)
 
-    # Ensure total width is at least len("Activity") = 8
-    total = mc + 1 + ml + 1 + md
-    pad = max(0, 8 - total)
-    mc += pad  # add extra padding to leftmost component
+    # Total width: at least header "Activity" (8), at least content + 2 gaps
+    total = max(8, mc + ml + md + 2)
+
+    # Distribute leftover space evenly across the 2 gaps
+    gap_total = total - mc - ml - md
+    gap1 = (gap_total + 1) // 2  # first gap gets extra char if odd
+    gap2 = gap_total // 2
+
+    s1 = " " * gap1
+    s2 = " " * gap2
 
     for p, (c, lk, d) in zip(plist, rows):
         cs = c.rjust(mc)
         ls = lk.rjust(ml)
         ds = d.rjust(md)
-        p["_activity"] = f"{cs} {cl.OKBLUE}{ls}{cl.ENDFGC} {cl.FAIL}{ds}{cl.ENDFGC}"
+        p["_activity"] = f"{cs}{s1}{cl.OKBLUE}{ls}{cl.ENDFGC}{s2}{cl.FAIL}{ds}{cl.ENDFGC}"
 
 
 def list_vis(args: Dict[str, Any], type: str) -> None:

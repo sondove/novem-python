@@ -533,13 +533,14 @@ class TestFormatActivity:
         colors()
         plist = [{"_comments": 0, "_likes": 0, "_dislikes": 0}]
         _format_activity(plist)
-        assert self._plain(plist[0]) == "   - - -"  # padded to "Activity" width
+        # 3 single-char components, total=8, gaps=5 → gap1=3, gap2=2
+        assert self._plain(plist[0]) == "-   -  -"
 
     def test_single_digits(self) -> None:
         colors()
         plist = [{"_comments": 1, "_likes": 2, "_dislikes": 3}]
         _format_activity(plist)
-        assert self._plain(plist[0]) == "   1 2 3"  # padded to "Activity" width
+        assert self._plain(plist[0]) == "1   2  3"
 
     def test_mixed_widths_align(self) -> None:
         colors()
@@ -552,7 +553,7 @@ class TestFormatActivity:
         p1 = self._plain(plist[1])
         # All rows should have the same visible width
         assert len(p0) == len(p1)
-        # Components right-aligned
+        # Components right-aligned within sub-columns, gaps evenly distributed
         assert p0 == "  1 50  -"
         assert p1 == "100  1 10"
 
