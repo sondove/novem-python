@@ -6,6 +6,7 @@ from novem.cli.gql import (
     _build_comment_fragment,
     _build_topics_query,
     _get_gql_endpoint,
+    _has_truncated_replies,
     _relative_time,
     _visible_len,
     _wrap_text,
@@ -140,6 +141,48 @@ class TestBuildTopicsQuery:
         q = _build_topics_query("mails")
         assert "mails(id: $id, author: $author)" in q
 
+    def test_custom_depth(self) -> None:
+        q = _build_topics_query("plots", depth=6)
+        assert q.count("replies {") == 6
+
+    def test_default_depth(self) -> None:
+        q = _build_topics_query("plots")
+        assert q.count("replies {") == 3
+
+
+# --- Unit tests for _has_truncated_replies ---
+
+
+class TestHasTruncatedReplies:
+    def test_empty(self) -> None:
+        assert _has_truncated_replies([]) is False
+
+    def test_no_truncation(self) -> None:
+        comments = [_make_comment(num_replies=0, replies=[])]
+        assert _has_truncated_replies(comments) is False
+
+    def test_replies_present(self) -> None:
+        reply = _make_comment(comment_id=2, num_replies=0, replies=[])
+        comments = [_make_comment(num_replies=1, replies=[reply])]
+        assert _has_truncated_replies(comments) is False
+
+    def test_truncated_leaf(self) -> None:
+        # num_replies > 0 but no replies data
+        comments = [_make_comment(num_replies=3, replies=[])]
+        assert _has_truncated_replies(comments) is True
+
+    def test_truncated_nested(self) -> None:
+        # Truncation deep in the tree
+        deep = _make_comment(comment_id=3, num_replies=2, replies=[])
+        mid = _make_comment(comment_id=2, num_replies=1, replies=[deep])
+        comments = [_make_comment(num_replies=1, replies=[mid])]
+        assert _has_truncated_replies(comments) is True
+
+    def test_mixed(self) -> None:
+        ok = _make_comment(comment_id=1, num_replies=0, replies=[])
+        truncated = _make_comment(comment_id=2, num_replies=5, replies=[])
+        assert _has_truncated_replies([ok, truncated]) is True
+
 
 # --- Unit tests for render_topics ---
 
@@ -183,6 +226,7 @@ def _make_comment(
     edited: bool = False,
     likes: int = 0,
     dislikes: int = 0,
+    num_replies: int = -1,
     created: str = "Mon, 10 Feb 2026 12:05:00 UTC",
     replies: list = None,
 ) -> dict:
@@ -193,7 +237,7 @@ def _make_comment(
         "depth": depth,
         "deleted": deleted,
         "edited": edited,
-        "num_replies": len(replies) if replies else 0,
+        "num_replies": num_replies if num_replies >= 0 else (len(replies) if replies else 0),
         "likes": likes,
         "dislikes": dislikes,
         "created": created,
@@ -463,6 +507,144 @@ def test_comments_mail(cli, requests_mock, fs) -> None:
 
     out, err = cli("-m", "my_mail", "--comments")
     assert "No topics" in out
+
+
+def test_comments_adaptive_depth(cli, requests_mock, fs) -> None:
+    """Test --comments re-fetches with deeper query when replies are truncated."""
+    write_config(auth_req)
+
+    call_count = 0
+
+    def adaptive_gql(request, context):
+        nonlocal call_count
+        call_count += 1
+        body = request.json()
+        query = body.get("query", "")
+        depth = query.count("replies {")
+
+        if depth <= 3:
+            # First fetch: return truncated comment (num_replies > 0 but no replies)
+            return json.dumps(
+                {
+                    "data": {
+                        "plots": [
+                            {
+                                "topics": [
+                                    {
+                                        "topic_id": 1,
+                                        "slug": "t1",
+                                        "message": "Topic",
+                                        "audience": "public",
+                                        "status": "active",
+                                        "num_comments": 2,
+                                        "likes": 0,
+                                        "dislikes": 0,
+                                        "my_reaction": None,
+                                        "edited": False,
+                                        "created": "Mon, 10 Feb 2026 12:00:00 UTC",
+                                        "updated": "Mon, 10 Feb 2026 12:00:00 UTC",
+                                        "creator": {"username": "alice"},
+                                        "comments": [
+                                            {
+                                                "comment_id": 1,
+                                                "slug": "c1",
+                                                "message": "Deep thread",
+                                                "depth": 0,
+                                                "deleted": False,
+                                                "edited": False,
+                                                "num_replies": 1,
+                                                "likes": 0,
+                                                "dislikes": 0,
+                                                "my_reaction": None,
+                                                "created": "Mon, 10 Feb 2026 12:05:00 UTC",
+                                                "updated": "Mon, 10 Feb 2026 12:05:00 UTC",
+                                                "creator": {"username": "bob"},
+                                                "replies": [],
+                                            }
+                                        ],
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            )
+        else:
+            # Deeper fetch: return full tree with replies resolved
+            return json.dumps(
+                {
+                    "data": {
+                        "plots": [
+                            {
+                                "topics": [
+                                    {
+                                        "topic_id": 1,
+                                        "slug": "t1",
+                                        "message": "Topic",
+                                        "audience": "public",
+                                        "status": "active",
+                                        "num_comments": 2,
+                                        "likes": 0,
+                                        "dislikes": 0,
+                                        "my_reaction": None,
+                                        "edited": False,
+                                        "created": "Mon, 10 Feb 2026 12:00:00 UTC",
+                                        "updated": "Mon, 10 Feb 2026 12:00:00 UTC",
+                                        "creator": {"username": "alice"},
+                                        "comments": [
+                                            {
+                                                "comment_id": 1,
+                                                "slug": "c1",
+                                                "message": "Deep thread",
+                                                "depth": 0,
+                                                "deleted": False,
+                                                "edited": False,
+                                                "num_replies": 1,
+                                                "likes": 0,
+                                                "dislikes": 0,
+                                                "my_reaction": None,
+                                                "created": "Mon, 10 Feb 2026 12:05:00 UTC",
+                                                "updated": "Mon, 10 Feb 2026 12:05:00 UTC",
+                                                "creator": {"username": "bob"},
+                                                "replies": [
+                                                    {
+                                                        "comment_id": 2,
+                                                        "slug": "c2",
+                                                        "message": "Deep reply",
+                                                        "depth": 1,
+                                                        "deleted": False,
+                                                        "edited": False,
+                                                        "num_replies": 0,
+                                                        "likes": 0,
+                                                        "dislikes": 0,
+                                                        "my_reaction": None,
+                                                        "created": "Mon, 10 Feb 2026 12:10:00 UTC",
+                                                        "updated": "Mon, 10 Feb 2026 12:10:00 UTC",
+                                                        "creator": {"username": "carol"},
+                                                        "replies": [],
+                                                    }
+                                                ],
+                                            }
+                                        ],
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            )
+
+    requests_mock.register_uri("POST", gql_endpoint, text=adaptive_gql)
+    requests_mock.register_uri("PUT", "https://api.novem.io/v1/vis/plots/deep_plot", status_code=201)
+
+    out, err = cli("-p", "deep_plot", "--comments")
+    plain = _strip_ansi(out)
+
+    # Should have fetched twice (depth=3 truncated, depth=6 resolved)
+    assert call_count == 2
+    # Deep reply should be present in output
+    assert "Deep reply" in plain
+    assert "@carol" in plain
 
 
 # --- Unit tests for _compact_num ---

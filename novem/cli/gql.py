@@ -1375,23 +1375,48 @@ query GetTopics($id: ID!, $author: String) {{
 """
 
 
-def _build_topics_query(vis_type: str) -> str:
+def _build_topics_query(vis_type: str, depth: int = 3) -> str:
     """Build a topics query for a given vis type (plots, grids, mails, etc.)."""
-    comment_fragment = _build_comment_fragment(4)
+    comment_fragment = _build_comment_fragment(depth)
     return _TOPICS_QUERY_TPL.format(vis_type=vis_type, comment_fragment=comment_fragment)
 
 
+def _has_truncated_replies(comments: List[Dict[str, Any]]) -> bool:
+    """Check if any comment has num_replies > 0 but empty replies list."""
+    for c in comments:
+        replies = c.get("replies", []) or []
+        if c.get("num_replies", 0) > 0 and not replies:
+            return True
+        if replies and _has_truncated_replies(replies):
+            return True
+    return False
+
+
 def fetch_topics_gql(gql: NovemGQL, vis_type: str, vis_id: str, author: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Fetch topics and comments for a visualisation."""
-    query = _build_topics_query(vis_type)
+    """Fetch topics and comments, deepening the query if threads are truncated."""
     variables: Dict[str, Any] = {"id": vis_id}
     if author:
         variables["author"] = author
-    data = gql._query(query, variables)
-    items = data.get(vis_type, [])
-    if not items:
-        return []
-    return items[0].get("topics", [])
+
+    depth = 3
+    max_depth = 12
+    topics: List[Dict[str, Any]] = []
+
+    while depth <= max_depth:
+        query = _build_topics_query(vis_type, depth=depth)
+        data = gql._query(query, variables)
+        items = data.get(vis_type, [])
+        if not items:
+            return []
+        topics = items[0].get("topics", [])
+
+        # Check if any topic has truncated comment trees
+        truncated = any(_has_truncated_replies(t.get("comments", [])) for t in topics)
+        if not truncated:
+            break
+        depth += 3
+
+    return topics
 
 
 def _relative_time(dt: datetime.datetime) -> str:
