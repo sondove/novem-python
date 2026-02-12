@@ -1468,8 +1468,8 @@ def _render_comment(comment: Dict[str, Any], prefix: str, connector: str, child_
     replies = comment.get("replies", []) or []
     for i, reply in enumerate(replies):
         is_last = i == len(replies) - 1
-        rc = "└─ " if is_last else "├─ "
-        rp = "   " if is_last else "│  "
+        rc = "└ " if is_last else "├ "
+        rp = "  " if is_last else "│ "
         lines.append(_render_comment(reply, f"{prefix}{child_prefix}", rc, rp, width))
 
     return "\n".join(lines)
@@ -1543,8 +1543,8 @@ def render_topics(topics: List[Dict[str, Any]]) -> str:
         comments = topic.get("comments", []) or []
         for i, comment in enumerate(comments):
             is_last = i == len(comments) - 1
-            connector = "├─ " if not is_last else "└─ "
-            child_prefix = "│  " if not is_last else "   "
+            connector = "├ " if not is_last else "└ "
+            child_prefix = "│ " if not is_last else "  "
             lines.append(_render_comment(comment, body_prefix, connector, child_prefix, width))
 
         if not comments:
