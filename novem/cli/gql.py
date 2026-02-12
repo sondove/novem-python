@@ -109,8 +109,8 @@ query ListVis($author: String, $limit: Int, $offset: Int) {
     }
     topics {
       num_comments
-      likes
-      dislikes
+      num_likes
+      num_dislikes
     }
   }
 }
@@ -138,8 +138,8 @@ query ListGrids($author: String, $limit: Int, $offset: Int) {
     }
     topics {
       num_comments
-      likes
-      dislikes
+      num_likes
+      num_dislikes
     }
   }
 }
@@ -167,8 +167,8 @@ query ListMails($author: String, $limit: Int, $offset: Int) {
     }
     topics {
       num_comments
-      likes
-      dislikes
+      num_likes
+      num_dislikes
     }
   }
 }
@@ -196,8 +196,8 @@ query ListJobs($author: String, $limit: Int, $offset: Int) {
     }
     topics {
       num_comments
-      likes
-      dislikes
+      num_likes
+      num_dislikes
     }
     last_run_status
     last_run_time
@@ -296,8 +296,8 @@ def _aggregate_activity(item: Dict[str, Any]) -> Dict[str, int]:
     topics = item.get("topics", []) or []
     return {
         "_comments": sum(t.get("num_comments", 0) for t in topics),
-        "_likes": sum(t.get("likes", 0) for t in topics),
-        "_dislikes": sum(t.get("dislikes", 0) for t in topics),
+        "_likes": sum(t.get("num_likes", 0) for t in topics),
+        "_dislikes": sum(t.get("num_dislikes", 0) for t in topics),
     }
 
 

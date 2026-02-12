@@ -506,15 +506,15 @@ class TestAggregateActivity:
         assert result == {"_comments": 0, "_likes": 0, "_dislikes": 0}
 
     def test_single_topic(self) -> None:
-        result = _aggregate_activity({"topics": [{"num_comments": 5, "likes": 3, "dislikes": 1}]})
+        result = _aggregate_activity({"topics": [{"num_comments": 5, "num_likes": 3, "num_dislikes": 1}]})
         assert result == {"_comments": 5, "_likes": 3, "_dislikes": 1}
 
     def test_multiple_topics(self) -> None:
         result = _aggregate_activity(
             {
                 "topics": [
-                    {"num_comments": 2, "likes": 1, "dislikes": 0},
-                    {"num_comments": 3, "likes": 4, "dislikes": 2},
+                    {"num_comments": 2, "num_likes": 1, "num_dislikes": 0},
+                    {"num_comments": 3, "num_likes": 4, "num_dislikes": 2},
                 ]
             }
         )
