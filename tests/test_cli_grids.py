@@ -1,7 +1,8 @@
 from functools import partial
 
 from novem.cli.gql import _get_gql_endpoint
-from novem.utils import API_ROOT, format_datetime_local, parse_api_datetime, pretty_format
+from novem.cli.vis import _format_activity, _format_views
+from novem.utils import API_ROOT, colors, format_datetime_local, parse_api_datetime, pretty_format
 
 from .utils import write_config
 
@@ -173,6 +174,7 @@ def test_grid_list(cli, requests_mock, fs):
             "summary": "Historical unemployment rate in the Nordic countries."
             " Data from IMFs World Economic Oulook published in October 2021"
             " Chart last updated as of 25 January 2022",
+            "_views": 0,
         },
         {
             "id": "covid_us_state_breakdown",
@@ -186,6 +188,7 @@ def test_grid_list(cli, requests_mock, fs):
             " capita broken down by US state. Raw data from the New York"
             " Times, calculations by Novem. Data last updated 23 November "
             "2021",
+            "_views": 0,
         },
         {
             "id": "covid_us_trend",
@@ -199,6 +202,7 @@ def test_grid_list(cli, requests_mock, fs):
             " capita broken down by US state. Raw data from the New York"
             " Times, calculations by Novem. Data last updated 23 November "
             "2021",
+            "_views": 0,
         },
         {
             "id": "covid_us_trend_region",
@@ -212,6 +216,7 @@ def test_grid_list(cli, requests_mock, fs):
             " capita broken down by US state. Raw data from the New York"
             " Times, calculations by Novem. Data last updated 23 November "
             "2021",
+            "_views": 0,
         },
         {
             "id": "en_letter_frequency",
@@ -225,6 +230,7 @@ def test_grid_list(cli, requests_mock, fs):
             " as published by the compilers. The chart above represents data"
             " taken from Pavel Micka's website, which cites Robert Lewand's"
             " Cryptological Mathematics.",
+            "_views": 0,
         },
         {
             "id": "unemployment_noridc",
@@ -237,6 +243,7 @@ def test_grid_list(cli, requests_mock, fs):
             "summary": "Historical unemployment rate in the Nordic "
             "countries. Data from IMFs World Economic Oulook published in"
             " October 2021 Chart last updated as of 25 January 2022",
+            "_views": 0,
         },
     ]
 
@@ -316,6 +323,18 @@ def test_grid_list(cli, requests_mock, fs):
             "overflow": "keep",
         },
         {
+            "key": "_activity",
+            "header": "Activity",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
+            "key": "_views_fmt",
+            "header": "Views",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
             "key": "name",
             "header": "Name",
             "type": "text",
@@ -341,11 +360,14 @@ def test_grid_list(cli, requests_mock, fs):
             "overflow": "truncate",
         },
     ]
+    colors()
     plist = user_grid_list
     for p in plist:
         dt = parse_api_datetime(p["updated"])
         if dt:
             p["updated"] = format_datetime_local(dt)
+    _format_activity(plist)
+    _format_views(plist)
 
     expected = pretty_format(plist, ppo) + "\n"
 

@@ -300,6 +300,15 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
     )
 
     vis.add_argument(
+        "--comments",
+        dest="comments",
+        action="store_true",
+        required=False,
+        default=False,
+        help="show topics and comments for the visualisation",
+    )
+
+    vis.add_argument(
         "--tree",
         metavar=("PATH"),
         dest="tree",

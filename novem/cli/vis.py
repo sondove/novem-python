@@ -24,6 +24,69 @@ from .gql import (
 )
 
 
+def _compact_num(n: int) -> str:
+    """Format a number compactly: 0→'-', 1–999 as-is, 1k, 1.2k, 1M, etc."""
+    if not n:
+        return "-"
+    if n < 1000:
+        return str(n)
+    if n < 100_000:
+        v = n / 1000
+        return f"{v:.1f}k".replace(".0k", "k")
+    if n < 1_000_000:
+        return f"{n // 1000}k"
+    v = n / 1_000_000
+    return f"{v:.1f}M".replace(".0M", "M")
+
+
+def _format_activity(plist: List[Dict[str, Any]]) -> None:
+    """Pre-format the _activity column with right-aligned, evenly-spaced components."""
+    # Compute compact strings for each row
+    rows = []
+    for p in plist:
+        c = _compact_num(p.get("_comments", 0))
+        lk = _compact_num(p.get("_likes", 0))
+        d = _compact_num(p.get("_dislikes", 0))
+        rows.append((c, lk, d))
+
+    if not rows:
+        return
+
+    # Max width per component
+    mc = max(len(r[0]) for r in rows)
+    ml = max(len(r[1]) for r in rows)
+    md = max(len(r[2]) for r in rows)
+
+    # Total width: at least header "Activity" (8), at least content + 2 gaps
+    total = max(8, mc + ml + md + 2)
+
+    # Distribute leftover space evenly across the 2 gaps
+    gap_total = total - mc - ml - md
+    gap1 = (gap_total + 1) // 2  # first gap gets extra char if odd
+    gap2 = gap_total // 2
+
+    s1 = " " * gap1
+    s2 = " " * gap2
+
+    for p, (c, lk, d) in zip(plist, rows):
+        cs = c.rjust(mc)
+        ls = lk.rjust(ml)
+        ds = d.rjust(md)
+        p["_activity"] = f"{cs}{s1}{cl.OKBLUE}{ls}{cl.ENDFGC}{s2}{cl.FAIL}{ds}{cl.ENDFGC}"
+
+
+def _format_views(plist: List[Dict[str, Any]]) -> None:
+    """Pre-format the _views column as a right-aligned compact number."""
+    if not plist:
+        return
+
+    rows = [_compact_num(p.get("_views", 0)) for p in plist]
+    mw = max(max(len(r) for r in rows), len("Views"))
+
+    for p, r in zip(plist, rows):
+        p["_views_fmt"] = r.rjust(mw)
+
+
 def list_vis(args: Dict[str, Any], type: str) -> None:
     colors()
     # get current plot list
@@ -167,6 +230,18 @@ def list_vis(args: Dict[str, Any], type: str) -> None:
             "overflow": "keep",
         },
         {
+            "key": "_activity",
+            "header": "Activity",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
+            "key": "_views_fmt",
+            "header": "Views",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
             "key": "name",
             "header": "Name",
             "type": "text",
@@ -197,6 +272,9 @@ def list_vis(args: Dict[str, Any], type: str) -> None:
         dt = parse_api_datetime(p["updated"])
         if dt:
             p["updated"] = format_datetime_local(dt)
+
+    _format_activity(plist)
+    _format_views(plist)
 
     striped: bool = config.get("cli_striped", False)
     ppl = pretty_format(plist, ppo, striped=striped)
@@ -832,6 +910,18 @@ def list_jobs(args: Dict[str, Any]) -> None:
             "overflow": "keep",
         },
         {
+            "key": "_activity",
+            "header": "Activity",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
+            "key": "_views_fmt",
+            "header": "Views",
+            "type": "text",
+            "overflow": "keep",
+        },
+        {
             "key": "triggers",
             "header": "Trigger",
             "type": "text",
@@ -883,6 +973,9 @@ def list_jobs(args: Dict[str, Any]) -> None:
 
         # Last run - format last_run_time as relative time
         p["_last_run"] = _format_time_ago(p.get("last_run_time", ""))
+
+    _format_activity(plist)
+    _format_views(plist)
 
     # Calculate max widths for right-aligned columns (must be at least header width)
     max_steps = max(max((len(p["_steps"]) for p in plist), default=0), len("Steps"))
