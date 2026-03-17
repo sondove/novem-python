@@ -517,27 +517,32 @@ class Context(NovemAPI):
     def _do_reply(self, text: str, title: Optional[str] = None) -> str:
         """Post a reply and return the API path of the created comment."""
         base = self._threads_base
-        username = self._config.get("username", "")
         slug = title or _gen_slug()
+        username = self.me
         my_ref = f"@{username}~{slug}"
 
-        # Build path from /c/ chain
+        # Walk the full comment chain to reply under the correct parent
         if self._comment_chain:
-            path = f"{base}/{self._comment_chain[0]}"
+            # Build parent path using full @user~slug refs
+            parent = f"{base}/{self._comment_chain[0]}"
             for seg in self._comment_chain[1:]:
-                path += f"/comments/{seg}"
-            path += f"/comments/{my_ref}"
+                parent += f"/comments/{seg}"
+            # Create uses bare slug, subsequent writes use @username~slug
+            create_path = f"{parent}/comments/{slug}"
+            full_path = f"{parent}/comments/{my_ref}"
         else:
             # No focus — reply to latest topic, or create new one
             self._load()
             if self._topics:
-                path = f"{base}/{self._topics[0].ref}/comments/{my_ref}"
+                create_path = f"{base}/{self._topics[0].ref}/comments/{slug}"
+                full_path = f"{base}/{self._topics[0].ref}/comments/{my_ref}"
             else:
-                path = f"{base}/{my_ref}"
+                create_path = f"{base}/{slug}"
+                full_path = f"{base}/{my_ref}"
 
-        self.create(path)  # 409 (already exists) returns False — fine, we'll update
-        self.write(f"{path}/msg", text)
-        return path
+        self.create(create_path)  # 409 (already exists) returns False — fine, we'll update
+        self.write(f"{full_path}/msg", text)
+        return full_path
 
 
 # ---------------------------------------------------------------------------
@@ -822,6 +827,7 @@ def MCP(fqnp: str, **kwargs: Any) -> Any:
                 # Create new reply
                 slug = server.reply_slug  # type: ignore[attr-defined]
                 _reply_path = ctx._do_reply(text, title=slug)
+                server._reply_path = _reply_path  # type: ignore[attr-defined]
                 return "Reply posted."
         except Exception as e:
             return f"Reply failed: {e}"
