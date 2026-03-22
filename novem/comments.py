@@ -7,6 +7,7 @@ see the ``examples/`` directory for typical integration patterns.
 """
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -172,9 +173,12 @@ class Topic:
 
 def _dict_to_comment(d: Dict[str, Any]) -> Comment:
     """Convert a GQL comment dict to a Comment."""
+    from .cli.gql import _resolve_mentions
+
+    message = _resolve_mentions(d.get("message", "") or "", d.get("mentions"))
     return Comment(
         slug=d.get("slug", ""),
-        message=d.get("message", "") or "",
+        message=message,
         creator=d.get("creator", {}).get("username", ""),
         depth=d.get("depth", 0),
         replies=[_dict_to_comment(r) for r in (d.get("replies") or [])],
@@ -192,9 +196,12 @@ def _dict_to_comment(d: Dict[str, Any]) -> Comment:
 
 def _dict_to_topic(d: Dict[str, Any]) -> Topic:
     """Convert a GQL topic dict to a Topic."""
+    from .cli.gql import _resolve_mentions
+
+    message = _resolve_mentions(d.get("message", "") or "", d.get("mentions"))
     return Topic(
         slug=d.get("slug", ""),
-        message=d.get("message", "") or "",
+        message=message,
         creator=d.get("creator", {}).get("username", ""),
         comments=[_dict_to_comment(c) for c in (d.get("comments") or [])],
         topic_id=d.get("topic_id"),
@@ -208,6 +215,59 @@ def _dict_to_topic(d: Dict[str, Any]) -> Topic:
         created=d.get("created", ""),
         updated=d.get("updated", ""),
     )
+
+
+# ---------------------------------------------------------------------------
+# JSON serialization
+# ---------------------------------------------------------------------------
+
+
+def _comment_to_dict(
+    c: Comment,
+    parent_fqnp: str,
+    current_ref: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Convert a Comment to a JSON-friendly dict."""
+    fqnp = f"{parent_fqnp}/c/{c.ref}"
+    d: Dict[str, Any] = {
+        "ref": c.ref,
+        "fqnp": fqnp,
+        "author": c.creator,
+        "message": c.message,
+        "created": c.created,
+        "updated": c.updated,
+        "edited": c.edited,
+        "children": [_comment_to_dict(r, fqnp, current_ref) for r in c.replies],
+    }
+    if c.ref == current_ref:
+        d["current"] = True
+    return d
+
+
+def _topic_to_dict(
+    t: Topic,
+    base_fqnp: str,
+    current_topic_ref: Optional[str] = None,
+    current_comment_ref: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Convert a Topic to a JSON-friendly dict."""
+    fqnp = f"{base_fqnp}/c/{t.ref}"
+    d: Dict[str, Any] = {
+        "ref": t.ref,
+        "fqnp": fqnp,
+        "author": t.creator,
+        "message": t.message,
+        "audience": t.audience,
+        "created": t.created,
+        "updated": t.updated,
+        "edited": t.edited,
+        "num_comments": t.num_comments,
+        "children": [_comment_to_dict(c, fqnp, current_comment_ref) for c in t.comments],
+    }
+    # Only mark topic as current when it's the deepest focus (no child comment focused)
+    if t.ref == current_topic_ref and not current_comment_ref:
+        d["current"] = True
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +313,7 @@ class Context(NovemAPI):
     def __init__(self, fqnp: str, **kwargs: Any) -> None:
         self._fqnp = fqnp
         self._parsed = _parse_fqnp(fqnp)
-        _, self._comment_chain = _split_comment_path(fqnp)
+        self._base_fqnp, self._comment_chain = _split_comment_path(fqnp)
         super().__init__(**kwargs)
         self._raw_topics: Optional[List[Dict[str, Any]]] = None
         self._raw_vars: Optional[List[Dict[str, Any]]] = None
@@ -382,39 +442,87 @@ class Context(NovemAPI):
             lines.append(f"- @{r.creator}~{r.slug}: {preview}")
         return "\n".join(lines)
 
+    def to_json(self) -> List[Dict[str, Any]]:
+        """Return all topics as a JSON-serializable list of dicts.
+
+        Each topic/comment includes its ``fqnp`` and the deepest node
+        in the /c/ chain gets a ``"current": true`` key.
+        """
+        self._load()
+        assert self._topics is not None
+
+        # Determine which refs mark the current focus
+        current_topic_ref: Optional[str] = None
+        current_comment_ref: Optional[str] = None
+        if self._comment_chain:
+            current_topic_ref = self._comment_chain[0]
+            if len(self._comment_chain) >= 2:
+                current_comment_ref = self._comment_chain[-1]
+
+        return [_topic_to_dict(t, self._base_fqnp, current_topic_ref, current_comment_ref) for t in self._topics]
+
     @property
     def focused_thread(self) -> str:
-        """Plain-text rendering of the ancestor chain down to the focused comment.
+        """JSON rendering of the ancestor chain down to the focused comment.
 
-        Returns the topic, then each comment in the /c/ chain (the conversation
-        leading to the mention), with the final (focused) comment clearly marked.
+        Returns a pretty-printed JSON array containing the focused topic
+        with only the comments in the /c/ chain (the conversation leading
+        to the mention).  The deepest node has ``"current": true``.
         If there's no focus, returns an empty string.
         """
         t = self.topic
         if t is None:
             return ""
 
-        lines = [f"Topic {t.ref} by @{t.creator}"]
-        for line in t.message.splitlines():
-            lines.append(f"  {line}")
+        # Build a pruned tree: only include comments in the /c/ chain
+        base = self._base_fqnp
+        is_topic_current = len(self._comment_chain) == 1
+        topic_fqnp = f"{base}/c/{t.ref}"
 
-        # Walk the /c/ chain (skipping the topic ref which is _comment_chain[0])
+        result: Dict[str, Any] = {
+            "ref": t.ref,
+            "fqnp": topic_fqnp,
+            "author": t.creator,
+            "message": t.message,
+            "audience": t.audience,
+            "created": t.created,
+            "updated": t.updated,
+            "edited": t.edited,
+            "num_comments": t.num_comments,
+            "children": [],
+        }
+        if is_topic_current:
+            result["current"] = True
+
+        # Walk the /c/ chain to build the ancestor path
         if len(self._comment_chain) >= 2:
+            parent_dict = result
+            parent_fqnp = topic_fqnp
             comments = t.comments
             for i, ref in enumerate(self._comment_chain[1:]):
                 for c in comments:
                     if c.ref == ref:
                         is_last = i == len(self._comment_chain) - 2
-                        indent = i + 1
-                        prefix = "  " * indent
-                        marker = " <<<" if is_last else ""
-                        lines.append(f"{prefix}@{c.creator} ({c.ref}){marker}")
-                        for ln in c.message.splitlines():
-                            lines.append(f"{prefix}  {ln}")
+                        comment_fqnp = f"{parent_fqnp}/c/{c.ref}"
+                        child: Dict[str, Any] = {
+                            "ref": c.ref,
+                            "fqnp": comment_fqnp,
+                            "author": c.creator,
+                            "message": c.message,
+                            "created": c.created,
+                            "updated": c.updated,
+                            "edited": c.edited,
+                            "children": [],
+                        }
+                        if is_last:
+                            child["current"] = True
+                        parent_dict["children"].append(child)
+                        parent_dict = child
+                        parent_fqnp = comment_fqnp
                         comments = c.replies
                         break
 
-        return "\n".join(lines)
+        return json.dumps([result], indent=2)
 
     # -- Sync interface --
 

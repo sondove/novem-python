@@ -60,8 +60,12 @@ async def handle(msg: Any) -> None:
         _active.discard(msg.target_fqnp)
 
 
+def _log(msg: Any, text: str) -> None:
+    print(f"[{msg.ts}] {text}", file=sys.stderr)
+
+
 async def _handle(msg: Any) -> None:
-    print(f"[{msg.ts}] {msg.event_type}: {msg.actor} -> {msg.fqnp}", file=sys.stderr)
+    _log(msg, f"event: {msg.event_type} from @{msg.actor} -> {msg.fqnp}")
 
     start = time.time()
     mcp = MCP(msg.target_fqnp)
@@ -73,12 +77,23 @@ async def _handle(msg: Any) -> None:
 
     # Username comes from the server (via the GQL query that loaded the thread)
     my_username = mcp.ctx.me
+    _log(msg, f"authenticated as @{my_username}")
 
     # Don't reply to our own comments — the focused comment is the one we'd
     # be replying under. If we wrote it, there's nothing to respond to.
     focused = mcp.ctx.comment or mcp.ctx.topic
     if focused and focused.creator == my_username:
-        print(f"[{msg.ts}] focused comment is ours, skipping: {msg.fqnp}", file=sys.stderr)
+        _log(msg, f"skip: focused comment by ourselves (@{my_username})")
+        return
+
+    if focused:
+        _log(msg, f"focused on {focused.ref} by @{focused.creator}")
+    else:
+        _log(msg, "no focused comment/topic found")
+
+    # Check for existing replies from us
+    if mcp.ctx.has_my_reply:
+        _log(msg, "skip: already replied to this comment")
         return
 
     def on_reply(text: str) -> str:
@@ -90,7 +105,12 @@ async def _handle(msg: Any) -> None:
     # Instant acknowledgement — will be overwritten with the real reply.
     # Uses the fixed slug, so concurrent "On it!" posts are idempotent.
     if msg.actor != my_username:
-        await mcp.call_tool("novem_reply", {"text": "On it!"})
+        _log(msg, "posting 'On it!' acknowledgement")
+        ack_result = await mcp.call_tool("novem_reply", {"text": "On it!"})
+        ack_text = ack_result[0][0].text if isinstance(ack_result, tuple) else ack_result[0].text
+        _log(msg, f"  ack result: {ack_text}")
+    else:
+        _log(msg, "actor is us, skipping acknowledgement")
 
     system = (
         _SYSTEM_PREFIX.format(username=my_username) + _SYSTEM_SELF_REPLY.format(username=my_username) + _SYSTEM_DOCS
@@ -108,6 +128,8 @@ async def _handle(msg: Any) -> None:
         "use the available tools before replying."
     )
 
+    _log(msg, f"calling {MODEL} (thread context: {len(thread)} chars)")
+
     messages: List[Any] = [
         {
             "role": "user",
@@ -115,7 +137,9 @@ async def _handle(msg: Any) -> None:
         },
     ]
 
+    turn = 0
     while True:
+        turn += 1
         resp = client.messages.create(
             model=MODEL,
             max_tokens=1024,
@@ -125,8 +149,17 @@ async def _handle(msg: Any) -> None:
         )
 
         tool_blocks = [b for b in resp.content if b.type == "tool_use"]
+        text_blocks = [b for b in resp.content if b.type == "text"]
+
         if not tool_blocks:
+            if text_blocks:
+                _log(msg, f"turn {turn}: model finished with text (no tool call)")
+            else:
+                _log(msg, f"turn {turn}: model finished (empty response)")
             break
+
+        tool_names = [b.name for b in tool_blocks]
+        _log(msg, f"turn {turn}: model called {tool_names}")
 
         messages.append({"role": "assistant", "content": resp.content})
         results = []
@@ -134,6 +167,7 @@ async def _handle(msg: Any) -> None:
             try:
                 result = await mcp.call_tool(block.name, block.input)
             except Exception as e:
+                _log(msg, f"  tool {block.name} error: {e}")
                 results.append({"type": "tool_result", "tool_use_id": block.id, "content": str(e), "is_error": True})
                 continue
             content = result[0] if isinstance(result, tuple) else result
@@ -147,9 +181,14 @@ async def _handle(msg: Any) -> None:
                         }
                     )
                 else:
+                    preview = item.text[:100].replace("\n", " ")
+                    _log(msg, f"  tool {block.name} -> {preview}{'...' if len(item.text) > 100 else ''}")
                     result_content.append({"type": "text", "text": item.text})
             results.append({"type": "tool_result", "tool_use_id": block.id, "content": result_content})
         messages.append({"role": "user", "content": results})
+
+    elapsed = time.time() - start
+    _log(msg, f"done in {elapsed:.1f}s ({turn} turn{'s' if turn != 1 else ''})")
 
 
 async def main() -> None:
