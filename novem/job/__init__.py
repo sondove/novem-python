@@ -297,20 +297,41 @@ class NovemJobAPI(NovemAPI):
     def shortname(self) -> str:
         return self.api_read("/shortname").strip()
 
-    def run(self) -> None:
+    def run(self, files: Optional[List[str]] = None) -> None:
         """
-        Trigger a job run by posting empty JSON to /data
+        Trigger a job run by posting to /data.
+
+        If *files* is provided, each entry must be prefixed with ``@``
+        (e.g. ``@data.csv``).  The files are sent as ``multipart/form-data``
+        with field names ``file_0``, ``file_1``, … and the original filename
+        preserved.  Without files, an empty JSON body is sent.
         """
         path = f"{self._api_root}jobs/{self.id}/data"
 
         if self._debug:
             print(f"POST: {path}")
 
-        r = self._session.post(
-            path,
-            headers={"Content-type": "application/json; charset=utf-8"},
-            data="{}",
-        )
+        if files:
+            multipart: List[Tuple[str, Any]] = []
+            for idx, raw in enumerate(files):
+                if not raw.startswith("@"):
+                    print(f"Error: file arguments must start with @, got: {raw}")
+                    sys.exit(1)
+                fpath = raw[1:]
+                if not os.path.isfile(fpath):
+                    print(f"Error: file not found: {fpath}")
+                    sys.exit(1)
+                multipart.append((f"file_{idx}", (os.path.basename(fpath), open(fpath, "rb"))))
+            if self._debug:
+                names = [os.path.basename(raw[1:]) for raw in files]
+                print(f"  files: {names}")
+            r = self._session.post(path, files=multipart)
+        else:
+            r = self._session.post(
+                path,
+                headers={"Content-type": "application/json; charset=utf-8"},
+                data="{}",
+            )
 
         if not r.ok:
             # Try to parse error message from JSON response

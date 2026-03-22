@@ -501,8 +501,10 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
     job.add_argument(
         "-R",
         dest="run_job",
-        action="store_true",
-        help="run the job",
+        nargs="*",
+        default=None,
+        metavar="@file",
+        help="run the job, optionally with one or more @file.ext to upload",
     )
 
     invite = parser.add_argument_group("invite")
