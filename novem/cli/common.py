@@ -359,7 +359,7 @@ def job(args: Dict[str, Any]) -> None:
     # -R (run): trigger job execution, optionally with file attachments
     if args.get("run_job") is not None:
         files = args["run_job"]
-        j.run(files=files if files else None)
+        j.run(files=files if files else None, output=args.get("output_dir"))
         return
 
     # --dump: dump entire API tree to file

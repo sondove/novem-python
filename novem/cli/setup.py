@@ -313,16 +313,6 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
     )
 
     vis.add_argument(
-        "-o",
-        metavar=("SOURCE"),
-        dest="for_other",
-        action="store",
-        required=False,
-        default=None,
-        help="specify entity to view vis for, @username, +org, @username~usergroup or +org~orggroup are supported",
-    )
-
-    vis.add_argument(
         "--comments",
         dest="comments",
         action="store_true",
@@ -505,6 +495,16 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
         default=None,
         metavar="@file",
         help="run the job, optionally with one or more @file.ext to upload",
+    )
+
+    job.add_argument(
+        "-o",
+        "--output",
+        dest="output_dir",
+        action="store",
+        default=None,
+        metavar="dir",
+        help="save job output to this directory (created if needed)",
     )
 
     invite = parser.add_argument_group("invite")
