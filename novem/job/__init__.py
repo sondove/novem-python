@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -297,20 +298,75 @@ class NovemJobAPI(NovemAPI):
     def shortname(self) -> str:
         return self.api_read("/shortname").strip()
 
-    def run(self) -> None:
+    @staticmethod
+    def _parse_filename(content_disposition: str) -> Optional[str]:
+        """Extract filename from Content-Disposition header."""
+        # Try RFC 8187 filename* first (UTF-8 encoded)
+        m = re.search(r"filename\*\s*=\s*UTF-8''(.+?)(?:;|$)", content_disposition, re.IGNORECASE)
+        if m:
+            from urllib.parse import unquote
+
+            return unquote(m.group(1).strip())
+        # Fall back to plain filename
+        m = re.search(r'filename\s*=\s*"?([^";]+)"?', content_disposition)
+        if m:
+            return m.group(1).strip()
+        return None
+
+    @staticmethod
+    def _dedup_path(folder: str, name: str) -> str:
+        """Return a path in *folder* for *name*, adding (1), (2), … on conflict."""
+        candidate = os.path.join(folder, name)
+        if not os.path.exists(candidate):
+            return candidate
+        base, ext = os.path.splitext(name)
+        n = 1
+        while True:
+            candidate = os.path.join(folder, f"{base} ({n}){ext}")
+            if not os.path.exists(candidate):
+                return candidate
+            n += 1
+
+    def run(self, files: Optional[List[str]] = None, output: Optional[str] = None) -> None:
         """
-        Trigger a job run by posting empty JSON to /data
+        Trigger a job run by posting to /data.
+
+        If *files* is provided, each entry must be prefixed with ``@``
+        (e.g. ``@data.csv``).  The files are sent as ``multipart/form-data``
+        with field names ``file_0``, ``file_1``, … and the original filename
+        preserved.  Without files, an empty JSON body is sent.
+
+        If *output* is provided, the response body is saved to that directory
+        (created if necessary) using the filename from the server's
+        Content-Disposition header.
         """
         path = f"{self._api_root}jobs/{self.id}/data"
 
         if self._debug:
             print(f"POST: {path}")
 
-        r = self._session.post(
-            path,
-            headers={"Content-type": "application/json; charset=utf-8"},
-            data="{}",
-        )
+        if files:
+            multipart: List[Tuple[str, Any]] = []
+            for idx, raw in enumerate(files):
+                if not raw.startswith("@"):
+                    print(f"Error: file arguments must start with @, got: {raw}")
+                    sys.exit(1)
+                fpath = raw[1:]
+                if not os.path.isfile(fpath):
+                    print(f"Error: file not found: {fpath}")
+                    sys.exit(1)
+                multipart.append((f"file_{idx}", (os.path.basename(fpath), open(fpath, "rb"))))
+            if self._debug:
+                names = [os.path.basename(raw[1:]) for raw in files]
+                print(f"  files: {names}")
+            r = self._session.post(path, files=multipart, stream=bool(output))
+        else:
+            r = self._session.post(
+                path,
+                headers={"Content-type": "application/json; charset=utf-8"},
+                data="{}",
+                stream=bool(output),
+            )
 
         if not r.ok:
             # Try to parse error message from JSON response
@@ -323,6 +379,23 @@ class NovemJobAPI(NovemAPI):
             except Exception:
                 print(f"Error: {r.text}")
             sys.exit(1)
+
+        if output:
+            os.makedirs(output, exist_ok=True)
+            cd = r.headers.get("Content-Disposition", "")
+            name = self._parse_filename(cd) or "output"
+            dest = self._dedup_path(output, name)
+            with open(dest, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            print(dest)
+        elif r.content:
+            cd = r.headers.get("Content-Disposition", "")
+            fname = self._parse_filename(cd)
+            if fname:
+                print(f"Job produced output ({fname}). Use -o <dir> to save it.")
+            else:
+                print("Job completed.")
 
     def api_dump(self, outpath: str) -> None:
         """

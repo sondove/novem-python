@@ -5,8 +5,11 @@ from contextlib import redirect_stdout
 from functools import partial
 from unittest.mock import patch
 
+import pytest
+
 from novem import Job
 from novem.exceptions import Novem403, Novem404
+from novem.job import Job as _Job
 from novem.utils import API_ROOT
 
 
@@ -584,3 +587,280 @@ def test_job_with_config_dict(requests_mock):
     assert j.config.type == new_type
     assert j.config.extract == new_extract
     assert j.config.render == new_render
+
+
+# ---------------------------------------------------------------------------
+# run() tests
+# ---------------------------------------------------------------------------
+
+
+def _make_job(requests_mock, job_id="test_job"):
+    """Helper: create a Job with mocked creation endpoint."""
+    base = os.path.dirname(os.path.abspath(__file__))
+    config_file = f"{base}/test.conf"
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    api_root = config["general"]["api_root"]
+
+    requests_mock.register_uri("put", f"{api_root}jobs/{job_id}", text="")
+    return Job(job_id, config_path=config_file), api_root
+
+
+def test_job_run_no_files(requests_mock):
+    """run() without files sends empty JSON to /data."""
+    j, api_root = _make_job(requests_mock)
+
+    captured = {}
+
+    def handler(request, context):
+        captured["content_type"] = request.headers.get("Content-Type", "")
+        captured["body"] = request.text
+        return ""
+
+    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text=handler)
+
+    j.run()
+    assert "application/json" in captured["content_type"]
+    assert captured["body"] == "{}"
+
+
+def test_job_run_with_files(requests_mock, tmp_path):
+    """run() with @-prefixed files sends multipart/form-data preserving filenames."""
+    j, api_root = _make_job(requests_mock)
+
+    # Create temp files
+    f1 = tmp_path / "data.csv"
+    f1.write_text("a,b\n1,2\n")
+    f2 = tmp_path / "config.json"
+    f2.write_text('{"key": "val"}')
+
+    captured = {}
+
+    def handler(request, context):
+        captured["content_type"] = request.headers.get("Content-Type", "")
+        captured["body"] = request.body
+        return ""
+
+    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text=handler)
+
+    j.run(files=[f"@{f1}", f"@{f2}"])
+
+    assert "multipart/form-data" in captured["content_type"]
+    body = captured["body"]
+    # requests encodes multipart as bytes or PreparedRequest body
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+    else:
+        body = str(body)
+    # Filenames should be preserved in Content-Disposition headers
+    assert "data.csv" in body
+    assert "config.json" in body
+    # Field names should follow file_0, file_1 convention
+    assert "file_0" in body
+    assert "file_1" in body
+
+
+def test_job_run_missing_at_prefix(requests_mock, tmp_path):
+    """run() rejects file args without @ prefix."""
+    j, api_root = _make_job(requests_mock)
+    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text="")
+
+    f1 = tmp_path / "data.csv"
+    f1.write_text("a,b\n1,2\n")
+
+    with pytest.raises(SystemExit):
+        j.run(files=[str(f1)])
+
+
+def test_job_run_file_not_found(requests_mock):
+    """run() exits if a file does not exist."""
+    j, api_root = _make_job(requests_mock)
+    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text="")
+
+    with pytest.raises(SystemExit):
+        j.run(files=["@nonexistent.csv"])
+
+
+def test_job_run_single_file(requests_mock, tmp_path):
+    """run() works with a single file."""
+    j, api_root = _make_job(requests_mock)
+
+    f1 = tmp_path / "report.xlsx"
+    f1.write_bytes(b"\x00\x01\x02")
+
+    captured = {}
+
+    def handler(request, context):
+        captured["content_type"] = request.headers.get("Content-Type", "")
+        captured["body"] = request.body
+        return ""
+
+    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text=handler)
+
+    j.run(files=[f"@{f1}"])
+
+    assert "multipart/form-data" in captured["content_type"]
+    body = captured["body"]
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+    else:
+        body = str(body)
+    assert "file_0" in body
+    assert "report.xlsx" in body
+
+
+def test_job_run_api_error(requests_mock, tmp_path, capsys):
+    """run() prints error and exits on non-ok response."""
+    j, api_root = _make_job(requests_mock)
+
+    requests_mock.register_uri(
+        "post",
+        f"{api_root}jobs/{j.id}/data",
+        json={"error": "quota exceeded"},
+        status_code=402,
+    )
+
+    with pytest.raises(SystemExit):
+        j.run()
+
+    out = capsys.readouterr().out
+    assert "quota exceeded" in out
+
+
+# ---------------------------------------------------------------------------
+# run() output tests (-o)
+# ---------------------------------------------------------------------------
+
+
+def test_job_run_output_saves_file(requests_mock, tmp_path):
+    """run(output=...) saves response body using server filename."""
+    j, api_root = _make_job(requests_mock)
+    out_dir = str(tmp_path / "results")
+
+    requests_mock.register_uri(
+        "post",
+        f"{api_root}jobs/{j.id}/data",
+        content=b"col1,col2\n1,2\n",
+        headers={"Content-Disposition": 'attachment; filename="report.csv"'},
+    )
+
+    j.run(output=out_dir)
+
+    saved = os.path.join(out_dir, "report.csv")
+    assert os.path.isfile(saved)
+    assert open(saved, "rb").read() == b"col1,col2\n1,2\n"
+
+
+def test_job_run_output_rfc8187_filename(requests_mock, tmp_path):
+    """run(output=...) parses RFC 8187 filename* header."""
+    j, api_root = _make_job(requests_mock)
+    out_dir = str(tmp_path / "out")
+
+    requests_mock.register_uri(
+        "post",
+        f"{api_root}jobs/{j.id}/data",
+        content=b"data",
+        headers={"Content-Disposition": "attachment; filename*=UTF-8''r%C3%A9sult.pdf"},
+    )
+
+    j.run(output=out_dir)
+
+    saved = os.path.join(out_dir, "résult.pdf")
+    assert os.path.isfile(saved)
+
+
+def test_job_run_output_fallback_name(requests_mock, tmp_path):
+    """run(output=...) falls back to 'output' when no filename in header."""
+    j, api_root = _make_job(requests_mock)
+    out_dir = str(tmp_path / "out")
+
+    requests_mock.register_uri(
+        "post",
+        f"{api_root}jobs/{j.id}/data",
+        content=b"hello",
+        headers={},
+    )
+
+    j.run(output=out_dir)
+
+    saved = os.path.join(out_dir, "output")
+    assert os.path.isfile(saved)
+    assert open(saved, "rb").read() == b"hello"
+
+
+def test_job_run_output_dedup(requests_mock, tmp_path):
+    """run(output=...) adds (1), (2), … for duplicate filenames."""
+    j, api_root = _make_job(requests_mock)
+    out_dir = str(tmp_path / "out")
+    os.makedirs(out_dir)
+    # Pre-create a file to trigger dedup
+    open(os.path.join(out_dir, "report.csv"), "w").close()
+
+    requests_mock.register_uri(
+        "post",
+        f"{api_root}jobs/{j.id}/data",
+        content=b"new data",
+        headers={"Content-Disposition": 'attachment; filename="report.csv"'},
+    )
+
+    j.run(output=out_dir)
+
+    saved = os.path.join(out_dir, "report (1).csv")
+    assert os.path.isfile(saved)
+    assert open(saved, "rb").read() == b"new data"
+
+
+def test_job_run_output_creates_dir(requests_mock, tmp_path):
+    """run(output=...) creates the output directory if it doesn't exist."""
+    j, api_root = _make_job(requests_mock)
+    out_dir = str(tmp_path / "a" / "b" / "c")
+
+    requests_mock.register_uri(
+        "post",
+        f"{api_root}jobs/{j.id}/data",
+        content=b"ok",
+        headers={"Content-Disposition": 'attachment; filename="out.txt"'},
+    )
+
+    j.run(output=out_dir)
+
+    assert os.path.isfile(os.path.join(out_dir, "out.txt"))
+
+
+# ---------------------------------------------------------------------------
+# _parse_filename / _dedup_path unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_filename_plain():
+    assert _Job._parse_filename('attachment; filename="report.csv"') == "report.csv"
+
+
+def test_parse_filename_unquoted():
+    assert _Job._parse_filename("attachment; filename=report.csv") == "report.csv"
+
+
+def test_parse_filename_rfc8187():
+    assert _Job._parse_filename("attachment; filename*=UTF-8''r%C3%A9port.pdf") == "réport.pdf"
+
+
+def test_parse_filename_rfc8187_takes_precedence():
+    header = "attachment; filename=\"fallback.csv\"; filename*=UTF-8''preferred.csv"
+    assert _Job._parse_filename(header) == "preferred.csv"
+
+
+def test_parse_filename_missing():
+    assert _Job._parse_filename("attachment") is None
+    assert _Job._parse_filename("") is None
+
+
+def test_dedup_path_no_conflict(tmp_path):
+    assert _Job._dedup_path(str(tmp_path), "file.txt") == os.path.join(str(tmp_path), "file.txt")
+
+
+def test_dedup_path_with_conflicts(tmp_path):
+    open(tmp_path / "file.txt", "w").close()
+    assert _Job._dedup_path(str(tmp_path), "file.txt") == os.path.join(str(tmp_path), "file (1).txt")
+
+    open(tmp_path / "file (1).txt", "w").close()
+    assert _Job._dedup_path(str(tmp_path), "file.txt") == os.path.join(str(tmp_path), "file (2).txt")
