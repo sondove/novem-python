@@ -369,6 +369,7 @@ def test_context_reply_with_chain(requests_mock):
 
     # FQNP with /c/ chain — reply() builds the full REST path
     ctx = Context("/u/alice/p/myplot/c/@sen~topic/c/@bob~reply", config_path=config_file)
+    ctx._me = "sondov"
     ctx.reply("Great point!")
 
     history = requests_mock.request_history
@@ -376,9 +377,9 @@ def test_context_reply_with_chain(requests_mock):
     post_reqs = [r for r in history if r.method == "POST" and "threads" in r.path]
     assert len(put_reqs) >= 1
     assert len(post_reqs) >= 1
-    # Should build full chain: topic/comments/comment/comments/@me~slug
-    assert "@sen~topic/comments/@bob~reply/comments/@sondov~r" in put_reqs[-1].path
-    assert "/msg" in post_reqs[-1].path
+    # Create uses bare slug, write uses @username~slug
+    assert "@sen~topic/comments/@bob~reply/comments/r" in put_reqs[-1].path
+    assert "@sen~topic/comments/@bob~reply/comments/@sondov~r" in post_reqs[-1].path
 
 
 def test_context_reply_with_title(requests_mock):
@@ -392,12 +393,15 @@ def test_context_reply_with_title(requests_mock):
     requests_mock.register_uri("POST", threads_re, status_code=200)
 
     ctx = Context("/u/alice/p/myplot/c/@sen~topic", config_path=config_file)
+    ctx._me = "sondov"
     ctx.reply("I agree!", title="agreed")
 
     history = requests_mock.request_history
     put_reqs = [r for r in history if r.method == "PUT" and "threads" in r.path]
-    # Slug should be "agreed", not auto-generated
-    assert "@sen~topic/comments/@sondov~agreed" in put_reqs[-1].path
+    post_reqs = [r for r in history if r.method == "POST" and "threads" in r.path]
+    # Create uses bare slug, write uses @username~slug
+    assert "@sen~topic/comments/agreed" in put_reqs[-1].path
+    assert "@sen~topic/comments/@sondov~agreed" in post_reqs[-1].path
 
 
 def test_context_reply_deep_chain(requests_mock):
@@ -415,12 +419,18 @@ def test_context_reply_deep_chain(requests_mock):
         "/u/alice/p/myplot/c/@sen~topic/c/@bob~mid/c/@charlie~leaf",
         config_path=config_file,
     )
+    ctx._me = "sondov"
     ctx.reply("Deep reply!", title="deeper")
 
     history = requests_mock.request_history
     put_reqs = [r for r in history if r.method == "PUT" and "threads" in r.path]
-    expected = "@sen~topic/comments/@bob~mid/comments/@charlie~leaf/comments/@sondov~deeper"
-    assert expected in put_reqs[-1].path
+    post_reqs = [r for r in history if r.method == "POST" and "threads" in r.path]
+    # Create uses bare slug
+    expected_create = "@sen~topic/comments/@bob~mid/comments/@charlie~leaf/comments/deeper"
+    assert expected_create in put_reqs[-1].path
+    # Write uses @username~slug
+    expected_full = "@sen~topic/comments/@bob~mid/comments/@charlie~leaf/comments/@sondov~deeper"
+    assert expected_full in post_reqs[-1].path
 
 
 def test_context_reply_org_group(requests_mock):
@@ -434,11 +444,14 @@ def test_context_reply_org_group(requests_mock):
     requests_mock.register_uri("POST", threads_re, status_code=200)
 
     ctx = Context("/o/myorg/g/mygroup/c/@sen~topic", config_path=config_file)
+    ctx._me = "sondov"
     ctx.reply("Group reply!", title="reply1")
 
     history = requests_mock.request_history
     put_reqs = [r for r in history if r.method == "PUT" and "threads" in r.path]
-    assert "orgs/myorg/groups/mygroup/threads/@sen~topic/comments/@sondov~reply1" in put_reqs[-1].path
+    post_reqs = [r for r in history if r.method == "POST" and "threads" in r.path]
+    assert "orgs/myorg/groups/mygroup/threads/@sen~topic/comments/reply1" in put_reqs[-1].path
+    assert "orgs/myorg/groups/mygroup/threads/@sen~topic/comments/@sondov~reply1" in post_reqs[-1].path
 
 
 def test_context_reply_user_group(requests_mock):
@@ -452,11 +465,14 @@ def test_context_reply_user_group(requests_mock):
     requests_mock.register_uri("POST", threads_re, status_code=200)
 
     ctx = Context("/u/alice/grp/mygroup/c/@sen~topic", config_path=config_file)
+    ctx._me = "sondov"
     ctx.reply("Group reply!", title="reply1")
 
     history = requests_mock.request_history
     put_reqs = [r for r in history if r.method == "PUT" and "threads" in r.path]
-    assert "users/alice/groups/mygroup/threads/@sen~topic/comments/@sondov~reply1" in put_reqs[-1].path
+    post_reqs = [r for r in history if r.method == "POST" and "threads" in r.path]
+    assert "users/alice/groups/mygroup/threads/@sen~topic/comments/reply1" in put_reqs[-1].path
+    assert "users/alice/groups/mygroup/threads/@sen~topic/comments/@sondov~reply1" in post_reqs[-1].path
 
 
 # ---------------------------------------------------------------------------

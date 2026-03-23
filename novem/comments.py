@@ -7,6 +7,7 @@ see the ``examples/`` directory for typical integration patterns.
 """
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -172,9 +173,12 @@ class Topic:
 
 def _dict_to_comment(d: Dict[str, Any]) -> Comment:
     """Convert a GQL comment dict to a Comment."""
+    from .cli.gql import _resolve_mentions
+
+    message = _resolve_mentions(d.get("message", "") or "", d.get("mentions"))
     return Comment(
         slug=d.get("slug", ""),
-        message=d.get("message", "") or "",
+        message=message,
         creator=d.get("creator", {}).get("username", ""),
         depth=d.get("depth", 0),
         replies=[_dict_to_comment(r) for r in (d.get("replies") or [])],
@@ -192,9 +196,12 @@ def _dict_to_comment(d: Dict[str, Any]) -> Comment:
 
 def _dict_to_topic(d: Dict[str, Any]) -> Topic:
     """Convert a GQL topic dict to a Topic."""
+    from .cli.gql import _resolve_mentions
+
+    message = _resolve_mentions(d.get("message", "") or "", d.get("mentions"))
     return Topic(
         slug=d.get("slug", ""),
-        message=d.get("message", "") or "",
+        message=message,
         creator=d.get("creator", {}).get("username", ""),
         comments=[_dict_to_comment(c) for c in (d.get("comments") or [])],
         topic_id=d.get("topic_id"),
@@ -208,6 +215,59 @@ def _dict_to_topic(d: Dict[str, Any]) -> Topic:
         created=d.get("created", ""),
         updated=d.get("updated", ""),
     )
+
+
+# ---------------------------------------------------------------------------
+# JSON serialization
+# ---------------------------------------------------------------------------
+
+
+def _comment_to_dict(
+    c: Comment,
+    parent_fqnp: str,
+    current_ref: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Convert a Comment to a JSON-friendly dict."""
+    fqnp = f"{parent_fqnp}/c/{c.ref}"
+    d: Dict[str, Any] = {
+        "ref": c.ref,
+        "fqnp": fqnp,
+        "author": c.creator,
+        "message": c.message,
+        "created": c.created,
+        "updated": c.updated,
+        "edited": c.edited,
+        "children": [_comment_to_dict(r, fqnp, current_ref) for r in c.replies],
+    }
+    if c.ref == current_ref:
+        d["current"] = True
+    return d
+
+
+def _topic_to_dict(
+    t: Topic,
+    base_fqnp: str,
+    current_topic_ref: Optional[str] = None,
+    current_comment_ref: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Convert a Topic to a JSON-friendly dict."""
+    fqnp = f"{base_fqnp}/c/{t.ref}"
+    d: Dict[str, Any] = {
+        "ref": t.ref,
+        "fqnp": fqnp,
+        "author": t.creator,
+        "message": t.message,
+        "audience": t.audience,
+        "created": t.created,
+        "updated": t.updated,
+        "edited": t.edited,
+        "num_comments": t.num_comments,
+        "children": [_comment_to_dict(c, fqnp, current_comment_ref) for c in t.comments],
+    }
+    # Only mark topic as current when it's the deepest focus (no child comment focused)
+    if t.ref == current_topic_ref and not current_comment_ref:
+        d["current"] = True
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -253,11 +313,12 @@ class Context(NovemAPI):
     def __init__(self, fqnp: str, **kwargs: Any) -> None:
         self._fqnp = fqnp
         self._parsed = _parse_fqnp(fqnp)
-        _, self._comment_chain = _split_comment_path(fqnp)
+        self._base_fqnp, self._comment_chain = _split_comment_path(fqnp)
         super().__init__(**kwargs)
         self._raw_topics: Optional[List[Dict[str, Any]]] = None
         self._raw_vars: Optional[List[Dict[str, Any]]] = None
         self._topics: Optional[List[Topic]] = None
+        self._me: str = ""
 
     # Convenience accessors for backward compat
     @property
@@ -271,6 +332,13 @@ class Context(NovemAPI):
     @property
     def _vis_id(self) -> Optional[str]:
         return self._parsed.vis_id
+
+    @property
+    def me(self) -> str:
+        """Current authenticated username, fetched from the server via GQL."""
+        if not self._me:
+            self._load()
+        return self._me
 
     @property
     def _threads_base(self) -> str:
@@ -301,6 +369,13 @@ class Context(NovemAPI):
             return
         self._raw_topics, self._raw_vars = self._fetch_raw_topics()
         self._topics = [_dict_to_topic(t) for t in self._raw_topics]
+
+    def reload(self) -> None:
+        """Force re-fetch the topic tree from GQL."""
+        self._raw_topics = None
+        self._raw_vars = None
+        self._topics = None
+        self._load()
 
     @property
     def topics(self) -> List[Topic]:
@@ -339,6 +414,115 @@ class Context(NovemAPI):
             else:
                 return node
         return node
+
+    def _my_replies(self) -> List[Comment]:
+        """Return direct replies from the current user on the focused node."""
+        username = self.me
+        if not username:
+            return []
+        node = self.comment or self.topic
+        if node is None:
+            return []
+        children = node.replies if isinstance(node, Comment) else node.comments
+        return [r for r in children if r.creator == username]
+
+    @property
+    def has_my_reply(self) -> bool:
+        """True if the focused comment/topic already has a direct reply from the current user."""
+        return len(self._my_replies()) > 0
+
+    def _my_replies_summary(self) -> str:
+        """One-line-per-reply summary of existing replies from the current user."""
+        replies = self._my_replies()
+        if not replies:
+            return "(none)"
+        lines = []
+        for r in replies:
+            preview = r.message[:120].replace("\n", " ")
+            lines.append(f"- @{r.creator}~{r.slug}: {preview}")
+        return "\n".join(lines)
+
+    def to_json(self) -> List[Dict[str, Any]]:
+        """Return all topics as a JSON-serializable list of dicts.
+
+        Each topic/comment includes its ``fqnp`` and the deepest node
+        in the /c/ chain gets a ``"current": true`` key.
+        """
+        self._load()
+        assert self._topics is not None
+
+        # Determine which refs mark the current focus
+        current_topic_ref: Optional[str] = None
+        current_comment_ref: Optional[str] = None
+        if self._comment_chain:
+            current_topic_ref = self._comment_chain[0]
+            if len(self._comment_chain) >= 2:
+                current_comment_ref = self._comment_chain[-1]
+
+        return [_topic_to_dict(t, self._base_fqnp, current_topic_ref, current_comment_ref) for t in self._topics]
+
+    @property
+    def focused_thread(self) -> str:
+        """JSON rendering of the ancestor chain down to the focused comment.
+
+        Returns a pretty-printed JSON array containing the focused topic
+        with only the comments in the /c/ chain (the conversation leading
+        to the mention).  The deepest node has ``"current": true``.
+        If there's no focus, returns an empty string.
+        """
+        t = self.topic
+        if t is None:
+            return ""
+
+        # Build a pruned tree: only include comments in the /c/ chain
+        base = self._base_fqnp
+        is_topic_current = len(self._comment_chain) == 1
+        topic_fqnp = f"{base}/c/{t.ref}"
+
+        result: Dict[str, Any] = {
+            "ref": t.ref,
+            "fqnp": topic_fqnp,
+            "author": t.creator,
+            "message": t.message,
+            "audience": t.audience,
+            "created": t.created,
+            "updated": t.updated,
+            "edited": t.edited,
+            "num_comments": t.num_comments,
+            "children": [],
+        }
+        if is_topic_current:
+            result["current"] = True
+
+        # Walk the /c/ chain to build the ancestor path
+        if len(self._comment_chain) >= 2:
+            parent_dict = result
+            parent_fqnp = topic_fqnp
+            comments = t.comments
+            for i, ref in enumerate(self._comment_chain[1:]):
+                for c in comments:
+                    if c.ref == ref:
+                        is_last = i == len(self._comment_chain) - 2
+                        comment_fqnp = f"{parent_fqnp}/c/{c.ref}"
+                        child: Dict[str, Any] = {
+                            "ref": c.ref,
+                            "fqnp": comment_fqnp,
+                            "author": c.creator,
+                            "message": c.message,
+                            "created": c.created,
+                            "updated": c.updated,
+                            "edited": c.edited,
+                            "children": [],
+                        }
+                        if is_last:
+                            child["current"] = True
+                        parent_dict["children"].append(child)
+                        parent_dict = child
+                        parent_fqnp = comment_fqnp
+                        comments = c.replies
+                        break
+
+        return json.dumps([result], indent=2)
 
     # -- Sync interface --
 
@@ -411,7 +595,7 @@ class Context(NovemAPI):
     # -- Internal --
 
     def _fetch_raw_topics(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        from .cli.gql import NovemGQL, fetch_group_topics_gql, fetch_vde_topics_gql
+        from .cli.gql import NovemGQL, _fetch_group_topics_gql, _fetch_vde_topics_gql
 
         gql_kwargs: Dict[str, Any] = {}
         if hasattr(self, "token"):
@@ -423,40 +607,50 @@ class Context(NovemAPI):
         p = self._parsed
 
         if p.is_group:
-            topics = fetch_group_topics_gql(
+            topics, username = _fetch_group_topics_gql(
                 gql,
                 group_name=p.group_name or "",
                 group_type=p.group_type or "",
                 parent=p.org or p.user or "",
             )
+            self._me = username
             return topics, []
 
-        return fetch_vde_topics_gql(gql, self._vis_type or "", self._vis_id or "", author=self._user)
+        topics, vde_vars, username = _fetch_vde_topics_gql(
+            gql, self._vis_type or "", self._vis_id or "", author=self._user
+        )
+        self._me = username
+        return topics, vde_vars
 
     def _do_reply(self, text: str, title: Optional[str] = None) -> str:
         """Post a reply and return the API path of the created comment."""
         base = self._threads_base
-        username = self._config.get("username", "")
         slug = title or _gen_slug()
+        username = self.me
         my_ref = f"@{username}~{slug}"
 
-        # Build path from /c/ chain
+        # Walk the full comment chain to reply under the correct parent
         if self._comment_chain:
-            path = f"{base}/{self._comment_chain[0]}"
+            # Build parent path using full @user~slug refs
+            parent = f"{base}/{self._comment_chain[0]}"
             for seg in self._comment_chain[1:]:
-                path += f"/comments/{seg}"
-            path += f"/comments/{my_ref}"
+                parent += f"/comments/{seg}"
+            # Create uses bare slug, subsequent writes use @username~slug
+            create_path = f"{parent}/comments/{slug}"
+            full_path = f"{parent}/comments/{my_ref}"
         else:
             # No focus — reply to latest topic, or create new one
             self._load()
             if self._topics:
-                path = f"{base}/{self._topics[0].ref}/comments/{my_ref}"
+                create_path = f"{base}/{self._topics[0].ref}/comments/{slug}"
+                full_path = f"{base}/{self._topics[0].ref}/comments/{my_ref}"
             else:
-                path = f"{base}/{my_ref}"
+                create_path = f"{base}/{slug}"
+                full_path = f"{base}/{my_ref}"
 
-        self.create(path)
-        self.write(f"{path}/msg", text)
-        return path
+        self.create(create_path)  # 409 (already exists) returns False — fine, we'll update
+        self.write(f"{full_path}/msg", text)
+        return full_path
 
 
 # ---------------------------------------------------------------------------
@@ -615,6 +809,8 @@ def MCP(fqnp: str, **kwargs: Any) -> Any:
 
     server.api_tools = api_tools  # type: ignore[attr-defined]
     server.on_reply = None  # type: ignore[attr-defined]
+    server.reply_slug = None  # type: ignore[attr-defined]
+    server.ctx = ctx  # type: ignore[attr-defined]
 
     # -- read-only tools ------------------------------------------------
 
@@ -726,8 +922,20 @@ def MCP(fqnp: str, **kwargs: Any) -> Any:
                 ctx.write(f"{_reply_path}/msg", text)
                 return "Reply updated."
             else:
+                # Before creating a new reply, re-check the thread to see
+                # if another handler already replied (race condition dedup).
+                ctx.reload()
+                if ctx.has_my_reply:
+                    existing = ctx._my_replies_summary()
+                    return (
+                        f"A reply from '{ctx.me}' already exists on this comment:\n\n"
+                        f"{existing}\n\n"
+                        "Do NOT reply again unless there is an obvious error to correct."
+                    )
                 # Create new reply
-                _reply_path = ctx._do_reply(text)
+                slug = server.reply_slug  # type: ignore[attr-defined]
+                _reply_path = ctx._do_reply(text, title=slug)
+                server._reply_path = _reply_path  # type: ignore[attr-defined]
                 return "Reply posted."
         except Exception as e:
             return f"Reply failed: {e}"

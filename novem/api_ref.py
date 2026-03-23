@@ -50,6 +50,10 @@ class Novem403(NovemException):
     pass
 
 
+class Novem409(NovemException):
+    pass
+
+
 class Novem401(NovemException):
     pass
 
@@ -84,25 +88,18 @@ class NovemAPI(object):
 
             urllib3.disable_warnings()
 
-        # api root should always be supplied in the result
-        self._api_root = config["api_root"]
-        if not self._api_root:
-            self._api_root = os.getenv("NOVEM_API_ROOT") or API_ROOT
+        self._api_root = config.get("api_root") or API_ROOT
 
-        env_token = os.getenv("NOVEM_TOKEN")
-        global did_token_warning
-
-        if config.get("token", None):
-            assert config["token"]
+        if config.get("token"):
             self.token = config["token"]
             self._session.headers["Authorization"] = f"Bearer {self.token}"
-            if env_token is not None and not did_token_warning:
+
+            # Warn if NOVEM_TOKEN is set to a different value than the resolved token
+            env_token = os.getenv("NOVEM_TOKEN")
+            global did_token_warning
+            if env_token and env_token != self.token and not did_token_warning:
                 did_token_warning = True
                 print("WARN: Both NOVEM_TOKEN and config file token are set. Using config file token.", file=sys.stderr)
-
-        elif env_token is not None:
-            self.token = env_token
-            self._session.headers["Authorization"] = f"Bearer {self.token}"
 
         elif not config_status:
             print(
@@ -186,7 +183,14 @@ or set the NOVEM_TOKEN environment variable.\
             else:
                 print(r.json())
 
-    def create(self, path: str) -> None:
+    def create(self, path: str, raise_on_conflict: bool = False) -> bool:
+        """PUT to create a resource. Returns True if created, False on 409.
+
+        Args:
+            path: API path to create.
+            raise_on_conflict: If True, raise Novem409 on HTTP 409 instead of
+                returning False.
+        """
 
         r = self._session.put(
             f"{self._api_root}{path}",
@@ -196,5 +200,11 @@ or set the NOVEM_TOKEN environment variable.\
             resp = r.json()
             if r.status_code == 404:
                 raise Novem404(resp["message"])
+            elif r.status_code == 409:
+                if raise_on_conflict:
+                    raise Novem409(resp.get("message", "Resource already exists"))
+                return False
             else:
                 print(r.json())
+
+        return True
