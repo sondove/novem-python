@@ -390,7 +390,12 @@ class NovemJobAPI(NovemAPI):
                     f.write(chunk)
             print(dest)
         elif r.content:
-            print(r.text)
+            cd = r.headers.get("Content-Disposition", "")
+            fname = self._parse_filename(cd)
+            if fname:
+                print(f"Job produced output ({fname}). Use -o <dir> to save it.")
+            else:
+                print("Job completed.")
 
     def api_dump(self, outpath: str) -> None:
         """
