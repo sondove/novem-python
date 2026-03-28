@@ -476,6 +476,18 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
         help="send a test e-mail to your registered address",
     )
 
+    doc = parser.add_argument_group("doc")
+
+    doc.add_argument(
+        "-d",
+        dest="doc",
+        action="store",
+        required=False,
+        default="",
+        nargs="?",
+        help="select doc to operate on, no parameter will list all your docs",
+    )
+
     job = parser.add_argument_group("job")
 
     job.add_argument(
