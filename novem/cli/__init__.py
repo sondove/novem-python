@@ -142,65 +142,33 @@ def refresh_config(args: Dict[str, Any]) -> None:
 
 def init_config(args: Dict[str, Any]) -> None:
     """
-    Initialize user and config
+    Initialize user and config.
 
-    the --init flag has been supplied, this means we are going to update the
-    configuration file. There are several different scenarios we have to adapt
-    to in this case:
-
-    * a simple --init with no options and missing config file
-      * request username and password from user
-      * authenticate against service
-      * create config file and store credentials if successful
-
-    * a simple --init with no options and existing config file
-      * check if config has a default user
-      * if default user exist in config, inform user that config
-      * already exist and terminate
-
-    * a simple --init with --profile <username> and missing config file
-      * request username and password from user
-        * with username prefilled as --profile
-      * authenticate against service
-      * create config file and store credentials if successful
-
-      --init
-
-      --profile
-      --token
-      --api-url
-      --force
-
-      user in config
-
-      config exist
-
-
-
-      if --token not supplied, request username and password
-      if --profile specified, prefill username
-
-      if token supplied request token info, if username password
-
+    --init [type]  where type is one of:
+      credentials  (default) prompt for username + password
+      oauth        browser-based OAuth flow
+      token        prompt for an existing novem token
     """
 
     if not args:
-        # make mypy happy, return if no argument supplied
         return
 
     _do_debug = False
     if "debug" in args and args["debug"]:
         _do_debug = True
 
-    token: Union[str, None] = None
-
-    if "token" in args:
-        token = args["token"]
-
     api_root: str = args["api-url"]
     profile: str = args["profile"]
     force: str = args["force"]
     config_path: str = args["config_path"]
+    init_type: str = args["init"]
+
+    if init_type not in ("credentials", "oauth", "token"):
+        print(
+            f'{cl.WARNING} ! {cl.ENDC}Unknown init type "{cl.OKCYAN}{init_type}{cl.ENDC}". '
+            f"Valid options: credentials, oauth, token"
+        )
+        sys.exit(1)
 
     # first check if we have a valid config
     if _do_debug:
@@ -214,52 +182,47 @@ def init_config(args: Dict[str, Any]) -> None:
         )
         sys.exit(1)
 
-    # resolve api_root early (needed for both token and password flows)
+    # resolve api_root early (needed for all flows)
     if not api_root:
         _, curconf = get_current_config(**args)
         api_root = curconf["api_root"]
 
+    # ensure api_root ends with /v1/ (user may pass bare domain like https://api.novem.io)
+    if not api_root.rstrip("/").endswith("/v1"):
+        api_root = api_root.rstrip("/") + "/v1/"
+    if not api_root.endswith("/"):
+        api_root = api_root + "/"
+
     ignore_ssl = args.get("ignore_ssl", False)
 
-    # handle --init --token flow: register an existing token
-    if token is True:  # flag given without value
-        token = getpass.getpass(" \u2022 novem token: ")
+    if init_type == "token":
+        _init_token(args, api_root, profile, config_path, ignore_ssl, _do_debug)
+    elif init_type == "oauth":
+        _init_oauth(args, api_root, profile, config_path, ignore_ssl, _do_debug)
+    else:
+        _init_credentials(args, api_root, profile, config_path, ignore_ssl, _do_debug)
 
-    if token:
-        if _do_debug:
-            print("INIT: validating supplied token")
 
-        try:
-            novem = NovemAPI(token=token, api_root=api_root, ignore_config=True, ignore_ssl=ignore_ssl, is_cli=True)
+def _init_credentials(
+    args: Dict[str, Any],
+    api_root: str,
+    profile: str,
+    config_path: str,
+    ignore_ssl: bool,
+    _do_debug: bool,
+) -> None:
+    """Authenticate with username and password, create a new API token."""
 
-            # validate token and get username via /whoami
-            username = novem.read("whoami")
-
-            # get token metadata
-            token_info = json.loads(novem.read("token"))
-            token_name = token_info["token_name"]
-
-        except (Novem401, Novem404, Exception) as e:
-            if _do_debug:
-                print(f"INIT: token validation failed: {e}")
-            print("Invalid or expired token")
-            sys.exit(1)
-
-        # default profile to username if not supplied
-        if not profile:
-            profile = username
-
-        do_update_config(profile, username, api_root, token_name, token, config_path)
-        return
-
-    # existing username/password flow
     if _do_debug:
-        print("INIT: construct token name")
+        print("INIT: starting credentials flow")
+
     valid_char_sm = string.ascii_lowercase + string.digits
     valid_char = valid_char_sm + "-_"
     hostname: str = socket.gethostname()
 
-    token_name = None
+    token_name: Union[str, None] = None
+    if "token-name" in args:
+        token_name = args["token-name"]
     if not token_name:
         token_hostname: str = "".join([x for x in hostname.lower() if x in valid_char])
         nounce: str = "".join(random.choice(valid_char_sm) for _ in range(8))
@@ -276,15 +239,11 @@ def init_config(args: Dict[str, Any]) -> None:
         token_name = new_token_name
 
     # get novem username
-    prefill = ""
-    if "profile" in args:
-        prefill = args["profile"]
-
-    if _do_debug:
-        print("INIT: request user input")
-
-    username = input_with_prefill(" \u2022 novem username: ", prefill)
-    # username = "abc"
+    username = ""
+    if profile:
+        username = input_with_prefill(" \u2022 novem username: ", profile)
+    else:
+        username = input(" \u2022 novem username: ")
 
     # get novem password
     password = getpass.getpass(" \u2022 novem password: ")
@@ -297,9 +256,6 @@ def init_config(args: Dict[str, Any]) -> None:
         "token_description": (f'cli token created for "{hostname}" ' f'on "{datetime.now():%Y-%m-%d:%H:%M:%S}"'),
     }
 
-    if _do_debug:
-        print("INIT: construct request")
-
     novem = NovemAPI(api_root=api_root, ignore_config=True, ignore_ssl=ignore_ssl, is_cli=True)
 
     try:
@@ -311,11 +267,87 @@ def init_config(args: Dict[str, Any]) -> None:
         print("Invalid username and/or password")
         sys.exit(1)
 
-    # default profile to username if not supplied
     if not profile:
         profile = username
 
-    # let's write our config
+    do_update_config(profile, username, api_root, token_name, token, config_path)
+
+
+def _init_token(
+    args: Dict[str, Any],
+    api_root: str,
+    profile: str,
+    config_path: str,
+    ignore_ssl: bool,
+    _do_debug: bool,
+) -> None:
+    """Register an existing novem token."""
+
+    if _do_debug:
+        print("INIT: starting token flow")
+
+    token: Union[str, None] = args.get("token")
+
+    if not token or token is True:
+        token = getpass.getpass(" \u2022 novem token: ")
+
+    if not token:
+        print("No token provided")
+        sys.exit(1)
+
+    try:
+        novem = NovemAPI(token=token, api_root=api_root, ignore_config=True, ignore_ssl=ignore_ssl, is_cli=True)
+
+        # validate token and get username via /whoami
+        username = novem.read("whoami")
+
+        # get token metadata
+        token_info = json.loads(novem.read("token"))
+        token_name = token_info["token_name"]
+
+    except (Novem401, Novem404, Exception) as e:
+        if _do_debug:
+            print(f"INIT: token validation failed: {e}")
+        print("Invalid or expired token")
+        sys.exit(1)
+
+    if not profile:
+        profile = username
+
+    do_update_config(profile, username, api_root, token_name, token, config_path)
+
+
+def _init_oauth(
+    args: Dict[str, Any],
+    api_root: str,
+    profile: str,
+    config_path: str,
+    ignore_ssl: bool,
+    _do_debug: bool,
+) -> None:
+    """Authenticate via browser-based OAuth flow."""
+
+    if _do_debug:
+        print("INIT: starting OAuth flow")
+
+    from .oauth import oauth_authenticate
+
+    token = oauth_authenticate(api_root, ignore_ssl=ignore_ssl)
+
+    # Use NovemAPI to fetch username and token metadata
+    novem = NovemAPI(token=token, api_root=api_root, ignore_config=True, ignore_ssl=ignore_ssl, is_cli=True)
+
+    username = novem.read("whoami")
+
+    try:
+        token_info = json.loads(novem.read("token"))
+        token_name = token_info["token_name"]
+    except Exception:
+        token_name = "oauth-cli"
+
+    if not profile:
+        profile = username
+
     do_update_config(profile, username, api_root, token_name, token, config_path)
 
 
