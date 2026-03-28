@@ -183,6 +183,38 @@ query ListMails($author: String, $limit: Int, $offset: Int) {
 }
 """
 
+LIST_DOCS_QUERY = """
+query ListDocs($author: String, $limit: Int, $offset: Int) {
+  docs(author: $author, limit: $limit, offset: $offset) {
+    id
+    name
+    type
+    summary
+    url
+    updated
+    public
+    shared {
+      id
+      name
+      type
+    }
+    tags {
+      id
+      name
+      type
+    }
+    social {
+      views
+    }
+    topics {
+      num_comments
+      num_likes
+      num_dislikes
+    }
+  }
+}
+"""
+
 LIST_JOBS_QUERY = """
 query ListJobs($author: String, $limit: Int, $offset: Int) {
   jobs(author: $author, limit: $limit, offset: $offset) {
@@ -377,6 +409,19 @@ def list_mails_gql(gql: NovemGQL, author: Optional[str] = None, limit: Optional[
     data = gql._query(LIST_MAILS_QUERY, variables)
     mails = data.get("mails", [])
     return _transform_vis_response(mails)
+
+
+def list_docs_gql(gql: NovemGQL, author: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    """List docs via GraphQL, returning REST-compatible format."""
+    variables: Dict[str, Any] = {}
+    if author:
+        variables["author"] = author
+    if limit:
+        variables["limit"] = limit
+
+    data = gql._query(LIST_DOCS_QUERY, variables)
+    docs = data.get("docs", [])
+    return _transform_vis_response(docs)
 
 
 def _transform_jobs_response(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
