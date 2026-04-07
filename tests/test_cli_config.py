@@ -443,7 +443,7 @@ token_info_resp = {
 
 
 def test_init_with_token_flag(requests_mock, fs, cli):
-    """Test --init --token with token provided via stdin prompt."""
+    """Test --init token with token provided via stdin prompt."""
     test_token = "test_token_value"
 
     # Mock /whoami to return username
@@ -459,7 +459,7 @@ def test_init_with_token_flag(requests_mock, fs, cli):
     assert not file_exists(cpath)
 
     # token is provided via stdin (getpass reads from stdin when /dev/tty is unavailable)
-    out, err = cli("--init", "--token", stdin=f"{test_token}\n")
+    out, err = cli("--init", "token", stdin=f"{test_token}\n")
 
     # verify that our config is there
     assert file_exists(cpath)
@@ -482,7 +482,7 @@ def test_init_with_token_flag(requests_mock, fs, cli):
 
 
 def test_init_with_token_and_profile(requests_mock, fs, cli):
-    """Test --init --token --profile to use a custom profile name."""
+    """Test --init token --profile to use a custom profile name."""
     test_token = "test_token_value"
 
     # Mock /whoami to return username
@@ -496,7 +496,7 @@ def test_init_with_token_and_profile(requests_mock, fs, cli):
 
     assert not file_exists(cpath)
 
-    out, err = cli("--init", "--token", "--profile", "myprofile", stdin=f"{test_token}\n")
+    out, err = cli("--init", "token", "--profile", "myprofile", stdin=f"{test_token}\n")
 
     assert file_exists(cpath)
 
@@ -526,7 +526,7 @@ def test_init_with_token_invalid(requests_mock, fs, cli):
     assert not file_exists(cpath)
 
     with pytest.raises(CliExit) as e:
-        cli("--init", "--token", stdin=f"{test_token}\n")
+        cli("--init", "token", stdin=f"{test_token}\n")
 
     out, err = e.value.args
     assert e.value.code == 1
