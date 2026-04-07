@@ -168,7 +168,7 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
         const=True,
         default=None,
         help="use this token instead, overrides profile lookup. "
-        "With --init, prompts for token to register an existing token",
+        "With --init token, supplies the token value directly",
     )
 
     parser.add_argument(
@@ -184,8 +184,13 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
     setup.add_argument(
         "--init",
         dest="init",
-        action="store_true",
-        help="authenticate with the novem service and create default configuration",
+        action="store",
+        nargs="?",
+        const="credentials",
+        default=None,
+        help="authenticate with the novem service and create default configuration. "
+        "Optional type: credentials (default, username+password), oauth (browser-based), "
+        "or token (paste an existing token)",
     )
 
     setup.add_argument(
