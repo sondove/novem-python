@@ -2,7 +2,7 @@ import os
 import sys
 from typing import Any, Dict, Literal, Optional
 
-from novem import Grid, Job, Mail, Plot
+from novem import Doc, Grid, Job, Mail, Plot
 from novem.api_ref import Novem404, NovemAPI
 from novem.cli.editor import edit
 from novem.cli.gql import NovemGQL, _build_var_lookup, fetch_vde_topics_gql, render_topics
@@ -21,7 +21,7 @@ from novem.vis import NovemVisAPI
 
 
 class VisBase:
-    def __init__(self, type: Literal["mail", "plot", "grid"]) -> None:
+    def __init__(self, type: Literal["mail", "plot", "grid", "doc"]) -> None:
         self.type = type
 
     @property
@@ -33,7 +33,7 @@ class VisBase:
         return f"{self.type}s"
 
     def set_data(self, nva: NovemVisAPI, data: str) -> None:
-        if self.type == "mail":
+        if self.type == "mail" or self.type == "doc":
             nva.content = data
         elif self.type == "grid":
             nva.layout = data
@@ -72,6 +72,18 @@ class VisBase:
             )
         elif self.type == "grid":
             return Grid(
+                name,
+                user=user,
+                ignore_ssl=ignore_ssl,
+                create=create,
+                config_path=args["config_path"],
+                qpr=args["qpr"],
+                debug=args["debug"],
+                config_profile=args["profile"],
+                is_cli=True,
+            )
+        elif self.type == "doc":
+            return Doc(
                 name,
                 user=user,
                 ignore_ssl=ignore_ssl,
@@ -308,6 +320,11 @@ def mail(args: Dict[str, Any]) -> None:
 def grid(args: Dict[str, Any]) -> None:
     grid = VisBase("grid")
     grid(args)
+
+
+def doc(args: Dict[str, Any]) -> None:
+    d = VisBase("doc")
+    d(args)
 
 
 def plot(args: Dict[str, Any]) -> None:

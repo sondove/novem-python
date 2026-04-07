@@ -22,7 +22,7 @@ else:
 from ..api_ref import NovemAPI
 from ..utils import cl, colors, get_config_path, get_current_config
 from ..version import __version__
-from .common import grid, job, mail, plot, user
+from .common import doc, grid, job, mail, plot, user
 from .config import check_if_profile_exists, update_config
 from .events import run_events
 from .gql import NovemGQL
@@ -652,6 +652,8 @@ novem --init --profile {args["profile"]}\
         mail(args)
     elif args and args["grid"] != "":
         grid(args)
+    elif args and args["doc"] != "":
+        doc(args)
     elif args and args["job"] != "":
         job(args)
     elif args and args["invite"] != "":

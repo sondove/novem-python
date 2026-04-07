@@ -11,6 +11,7 @@ from ..utils import cl, colors, format_datetime_local, get_current_config, parse
 from .filter import apply_filters
 from .gql import (
     NovemGQL,
+    list_docs_gql,
     list_grids_gql,
     list_jobs_gql,
     list_mails_gql,
@@ -137,6 +138,8 @@ def list_vis(args: Dict[str, Any], type: str) -> None:
             plist = list_grids_gql(gql, author=usr)
         elif pfx == "m":
             plist = list_mails_gql(gql, author=usr)
+        elif pfx == "d":
+            plist = list_docs_gql(gql, author=usr)
 
     # Apply filters (handles both legacy and new column-based filtering)
     plist = apply_filters(plist, args.get("filter"))
