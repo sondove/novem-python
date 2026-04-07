@@ -28,9 +28,7 @@ def _generate_pkce() -> Tuple[str, str]:
     verifier = secrets.token_urlsafe(64)
     digest = hashlib.sha256(verifier.encode("ascii")).digest()
     # base64url-encode without padding
-    challenge = (
-        digest.hex()  # not what we want — need proper base64url
-    )
+    challenge = digest.hex()  # not what we want — need proper base64url
     # proper base64url encoding
     import base64
 
@@ -163,7 +161,7 @@ def _try_browser_flow(
     server.timeout = 120  # 2 minute timeout
 
     # Try opening browser
-    print(f"\n  Opening browser to sign in...\n")
+    print("\n  Opening browser to sign in...\n")
     print(f"  If the browser doesn't open, visit:\n  {authorize_url}\n")
 
     try:
@@ -216,7 +214,7 @@ def _try_oob_flow(
     )
     authorize_url = f"{oauth_base}/oauth/authorize?{params}"
 
-    print(f"\n  Open this URL in your browser to sign in:\n")
+    print("\n  Open this URL in your browser to sign in:\n")
     print(f"  {authorize_url}\n")
 
     try:
@@ -257,5 +255,3 @@ def _exchange_code(
 
     data = resp.json()
     return data["access_token"]
-
-
