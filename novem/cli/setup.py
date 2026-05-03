@@ -515,6 +515,16 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
     )
 
     job.add_argument(
+        "-i",
+        "--input",
+        dest="input_dir",
+        action="store",
+        default=None,
+        metavar="dir",
+        help="upload all files in this directory with -R (preserves subdirectories; -R @file wins on name conflict)",
+    )
+
+    job.add_argument(
         "-o",
         "--output",
         dest="output_dir",
@@ -527,7 +537,7 @@ def setup(raw_args: Any = None) -> Tuple[Any, Dict[str, str]]:
     invite = parser.add_argument_group("invite")
 
     invite.add_argument(
-        "-i",
+        "--invites",
         dest="invite",
         action="store",
         required=False,

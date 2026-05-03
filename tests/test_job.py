@@ -728,6 +728,83 @@ def test_job_run_api_error(requests_mock, tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
+# run() input directory tests (-i)
+# ---------------------------------------------------------------------------
+
+
+def test_job_run_with_input_dir_preserves_subpaths(requests_mock, tmp_path):
+    """run(input_dir=...) walks the folder and preserves relative paths."""
+    j, api_root = _make_job(requests_mock)
+
+    indir = tmp_path / "in"
+    (indir / "sub").mkdir(parents=True)
+    (indir / "top.csv").write_text("x\n")
+    (indir / "sub" / "nested.json").write_text("{}")
+
+    captured = {}
+
+    def handler(request, context):
+        captured["content_type"] = request.headers.get("Content-Type", "")
+        captured["body"] = request.body
+        return ""
+
+    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text=handler)
+
+    j.run(input_dir=str(indir))
+
+    assert "multipart/form-data" in captured["content_type"]
+    body = captured["body"]
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+    # Relative path with forward slash must reach the wire
+    assert "sub/nested.json" in body
+    assert "top.csv" in body
+
+
+def test_job_run_input_dir_missing(requests_mock):
+    """run(input_dir=...) exits if the directory does not exist."""
+    j, api_root = _make_job(requests_mock)
+    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text="")
+
+    with pytest.raises(SystemExit):
+        j.run(input_dir="/nope/does/not/exist")
+
+
+def test_job_run_files_override_input_dir(requests_mock, tmp_path, capsys):
+    """When -R basename collides with an -i entry, -R wins and a warning is emitted."""
+    j, api_root = _make_job(requests_mock)
+
+    indir = tmp_path / "in"
+    indir.mkdir()
+    (indir / "data.csv").write_text("from-input\n")
+
+    other = tmp_path / "other"
+    other.mkdir()
+    explicit = other / "data.csv"
+    explicit.write_text("from-R\n")
+
+    captured = {}
+
+    def handler(request, context):
+        captured["body"] = request.body
+        return ""
+
+    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text=handler)
+
+    j.run(files=[f"@{explicit}"], input_dir=str(indir))
+
+    body = captured["body"]
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+    # Only the -R version's content should be present
+    assert "from-R" in body
+    assert "from-input" not in body
+
+    err = capsys.readouterr().err
+    assert "overrides" in err
+
+
+# ---------------------------------------------------------------------------
 # run() output tests (-o)
 # ---------------------------------------------------------------------------
 

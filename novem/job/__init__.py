@@ -327,14 +327,27 @@ class NovemJobAPI(NovemAPI):
                 return candidate
             n += 1
 
-    def run(self, files: Optional[List[str]] = None, output: Optional[str] = None) -> None:
+    def run(
+        self,
+        files: Optional[List[str]] = None,
+        input_dir: Optional[str] = None,
+        output: Optional[str] = None,
+    ) -> None:
         """
         Trigger a job run by posting to /data.
 
         If *files* is provided, each entry must be prefixed with ``@``
         (e.g. ``@data.csv``).  The files are sent as ``multipart/form-data``
-        with field names ``file_0``, ``file_1``, … and the original filename
-        preserved.  Without files, an empty JSON body is sent.
+        with field names ``file_0``, ``file_1``, … and the basename preserved.
+
+        If *input_dir* is provided, every file under that directory is uploaded
+        too, using its path relative to *input_dir* as the multipart filename
+        so subdirectories are preserved on the server.
+
+        When the same multipart filename appears in both sources, the *files*
+        entry wins and a warning is emitted.
+
+        Without files or input_dir, an empty JSON body is sent.
 
         If *output* is provided, the response body is saved to that directory
         (created if necessary) using the filename from the server's
@@ -345,9 +358,20 @@ class NovemJobAPI(NovemAPI):
         if self._debug:
             print(f"POST: {path}")
 
+        upload: Dict[str, str] = {}
+
+        if input_dir:
+            if not os.path.isdir(input_dir):
+                print(f"Error: input directory not found: {input_dir}")
+                sys.exit(1)
+            for root, _dirs, walked in os.walk(input_dir):
+                for entry in walked:
+                    fpath = os.path.join(root, entry)
+                    rel = os.path.relpath(fpath, input_dir).replace(os.sep, "/")
+                    upload[rel] = fpath
+
         if files:
-            multipart: List[Tuple[str, Any]] = []
-            for idx, raw in enumerate(files):
+            for raw in files:
                 if not raw.startswith("@"):
                     print(f"Error: file arguments must start with @, got: {raw}")
                     sys.exit(1)
@@ -355,10 +379,20 @@ class NovemJobAPI(NovemAPI):
                 if not os.path.isfile(fpath):
                     print(f"Error: file not found: {fpath}")
                     sys.exit(1)
-                multipart.append((f"file_{idx}", (os.path.basename(fpath), open(fpath, "rb"))))
+                mp_name = os.path.basename(fpath)
+                if mp_name in upload and upload[mp_name] != fpath:
+                    print(
+                        f"Warning: -R @{fpath} overrides -i entry {upload[mp_name]} " f"(both upload as {mp_name})",
+                        file=sys.stderr,
+                    )
+                upload[mp_name] = fpath
+
+        if upload:
+            multipart: List[Tuple[str, Any]] = [
+                (f"file_{idx}", (mp_name, open(fpath, "rb"))) for idx, (mp_name, fpath) in enumerate(upload.items())
+            ]
             if self._debug:
-                names = [os.path.basename(raw[1:]) for raw in files]
-                print(f"  files: {names}")
+                print(f"  files: {list(upload.keys())}")
             r = self._session.post(path, files=multipart, stream=bool(output))
         else:
             r = self._session.post(
