@@ -443,17 +443,12 @@ class NovemJobAPI(NovemAPI):
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
             if self._debug:
-                print(f"  files out: 1 ({name})")
-            print(dest)
+                print(f"  files out: 1 ({name}) -> {dest}")
         elif r.content:
-            cd = r.headers.get("Content-Disposition", "")
-            fname = self._parse_filename(cd)
             if self._debug:
+                cd = r.headers.get("Content-Disposition", "")
+                fname = self._parse_filename(cd)
                 print(f"  files out: 1 ({fname or 'unnamed'}, not saved — use -o)")
-            if fname:
-                print(f"Job produced output ({fname}). Use -o <dir> to save it.")
-            else:
-                print("Job completed.")
         else:
             if self._debug:
                 print("  files out: 0")
