@@ -801,6 +801,40 @@ def test_job_run_with_input_dir_preserves_subpaths(requests_mock, tmp_path):
     assert "top.csv" in body
 
 
+def test_job_run_input_dir_skips_dotfiles(requests_mock, tmp_path):
+    """run(input_dir=...) skips hidden files and hidden directories."""
+    j, api_root = _make_job(requests_mock)
+
+    indir = tmp_path / "in"
+    (indir / "sub").mkdir(parents=True)
+    (indir / ".git").mkdir()
+    (indir / "data.csv").write_text("x\n")
+    (indir / ".secret").write_text("nope")
+    (indir / "sub" / "ok.json").write_text("{}")
+    (indir / "sub" / ".hidden").write_text("nope")
+    (indir / ".git" / "HEAD").write_text("ref")
+
+    captured = {}
+
+    def handler(request, context):
+        captured["body"] = request.body
+        return ""
+
+    requests_mock.register_uri("post", f"{api_root}code/jobs/{j.id}/data", text=handler)
+
+    j.run(input_dir=str(indir))
+
+    body = captured["body"]
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+    assert "data.csv" in body
+    assert "sub/ok.json" in body
+    # dotfiles and contents of hidden dirs must not appear
+    assert ".secret" not in body
+    assert ".hidden" not in body
+    assert "HEAD" not in body
+
+
 def test_job_run_input_dir_missing(requests_mock):
     """run(input_dir=...) exits if the directory does not exist."""
     j, api_root = _make_job(requests_mock)

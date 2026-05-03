@@ -378,8 +378,12 @@ class NovemJobAPI(NovemAPI):
             if not os.path.isdir(input_dir):
                 print(f"Error: input directory not found: {input_dir}")
                 sys.exit(1)
-            for root, _dirs, walked in os.walk(input_dir):
+            for root, dirs, walked in os.walk(input_dir):
+                # skip hidden directories in-place so we don't descend into them
+                dirs[:] = [d for d in dirs if not d.startswith(".")]
                 for entry in walked:
+                    if entry.startswith("."):
+                        continue
                     fpath = os.path.join(root, entry)
                     rel = os.path.relpath(fpath, input_dir).replace(os.sep, "/")
                     upload[rel] = fpath
@@ -406,9 +410,11 @@ class NovemJobAPI(NovemAPI):
                 (f"file_{idx}", (mp_name, open(fpath, "rb"))) for idx, (mp_name, fpath) in enumerate(upload.items())
             ]
             if self._debug:
-                print(f"  files: {list(upload.keys())}")
+                print(f"  files in:  {len(upload)} ({list(upload.keys())})")
             r = self._session.post(path, files=multipart, stream=bool(output))
         else:
+            if self._debug:
+                print("  files in:  0")
             r = self._session.post(
                 path,
                 headers={"Content-type": "application/json; charset=utf-8"},
@@ -436,14 +442,21 @@ class NovemJobAPI(NovemAPI):
             with open(dest, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
+            if self._debug:
+                print(f"  files out: 1 ({name})")
             print(dest)
         elif r.content:
             cd = r.headers.get("Content-Disposition", "")
             fname = self._parse_filename(cd)
+            if self._debug:
+                print(f"  files out: 1 ({fname or 'unnamed'}, not saved — use -o)")
             if fname:
                 print(f"Job produced output ({fname}). Use -o <dir> to save it.")
             else:
                 print("Job completed.")
+        else:
+            if self._debug:
+                print("  files out: 0")
 
     def api_dump(self, outpath: str) -> None:
         """
