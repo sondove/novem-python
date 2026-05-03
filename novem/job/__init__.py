@@ -121,6 +121,9 @@ class NovemJobAPI(NovemAPI):
                  for the type file in the config folder
         value: the value to write to the file
         """
+        if self.user:
+            print("You cannot modify another user's job")
+            return
 
         path = self._path(relpath)
 
@@ -153,6 +156,9 @@ class NovemJobAPI(NovemAPI):
                  for the type file in the config folder
         value: the value to write to the file
         """
+        if self.user:
+            print("You cannot modify another user's job")
+            return
 
         path = self._path(relpath)
 
@@ -190,6 +196,9 @@ class NovemJobAPI(NovemAPI):
                  for the type file in the config folder
         value: the value to write to the file
         """
+        if self.user:
+            print("You cannot modify another user's job")
+            return
 
         path = self._path(relpath)
 
@@ -508,6 +517,9 @@ class NovemJobAPI(NovemAPI):
         Load a dumped folder structure back into the API.
         Walks the folder and for each file: PUT to create, then POST content.
         """
+        if self.user:
+            print("You cannot modify another user's job")
+            return
 
         qpath = self._path()
 

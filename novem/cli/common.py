@@ -112,8 +112,14 @@ class VisBase:
             # We'll just use the raw api
             novem = NovemAPI(**args, is_cli=True)
 
+            usr_for_path = args.get("for_user") or None
+            if usr_for_path:
+                api_path = f"users/{usr_for_path}/vis/{self.fragment}/{name}"
+            else:
+                api_path = f"vis/{self.fragment}/{name}"
+
             try:
-                novem.delete(f"vis/{self.fragment}/{name}")
+                novem.delete(api_path)
                 return
             except Novem404:
                 print(f"{self.title} {name} did not exist")
