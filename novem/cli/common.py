@@ -343,8 +343,10 @@ def job(args: Dict[str, Any]) -> None:
     # Delete job
     if args["delete"]:
         novem = NovemAPI(**args, is_cli=True)
+        usr_for_path = args.get("for_user") or None
+        api_path = f"users/{usr_for_path}/code/jobs/{name}" if usr_for_path else f"code/jobs/{name}"
         try:
-            novem.delete(f"jobs/{name}")
+            novem.delete(api_path)
             return
         except Novem404:
             print(f"Job {name} did not exist")

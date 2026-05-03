@@ -41,9 +41,9 @@ class NovemJobAPI(NovemAPI):
 
         self.config = NovemJobConfig(self)
         if self.user:
-            base_path = f"users/{self.user}/jobs/{self.id}"
+            base_path = f"users/{self.user}/code/jobs/{self.id}"
         else:
-            base_path = f"jobs/{self.id}"
+            base_path = f"code/jobs/{self.id}"
         self.shared = NovemShare(self, base_path)
         self.tags = NovemTags(self, base_path)
 
@@ -89,12 +89,17 @@ class NovemJobAPI(NovemAPI):
         else:
             super().__setattr__(name, value)
 
+    def _path(self, relpath: str = "") -> str:
+        if self.user:
+            return f"{self._api_root}users/{self.user}/code/jobs/{self.id}{relpath}"
+        return f"{self._api_root}code/jobs/{self.id}{relpath}"
+
     def api_read(self, relpath: str) -> str:
         """
         Read the api value located at realtive path
         """
 
-        qpath = f"{self._api_root}jobs/{self.id}{relpath}"
+        qpath = self._path(relpath)
 
         if self._debug:
             print(f"GET: {qpath}")
@@ -117,7 +122,7 @@ class NovemJobAPI(NovemAPI):
         value: the value to write to the file
         """
 
-        path = f"{self._api_root}jobs/{self.id}{relpath}"
+        path = self._path(relpath)
 
         if self._debug:
             print(f"DELETE: {path}")
@@ -149,7 +154,7 @@ class NovemJobAPI(NovemAPI):
         value: the value to write to the file
         """
 
-        path = f"{self._api_root}jobs/{self.id}{relpath}"
+        path = self._path(relpath)
 
         if self._debug:
             print(f"PUT: {path}")
@@ -186,7 +191,7 @@ class NovemJobAPI(NovemAPI):
         value: the value to write to the file
         """
 
-        path = f"{self._api_root}jobs/{self.id}{relpath}"
+        path = self._path(relpath)
 
         if self._debug:
             print(f"POST: {path}")
@@ -353,7 +358,7 @@ class NovemJobAPI(NovemAPI):
         (created if necessary) using the filename from the server's
         Content-Disposition header.
         """
-        path = f"{self._api_root}jobs/{self.id}/data"
+        path = self._path("/data")
 
         if self._debug:
             print(f"POST: {path}")
@@ -437,7 +442,7 @@ class NovemJobAPI(NovemAPI):
         """
 
         # Base path without trailing slash
-        qpath = f"{self._api_root}jobs/{self.id}"
+        qpath = self._path()
 
         # create util function
         def rec_tree(path: str) -> None:
@@ -504,7 +509,7 @@ class NovemJobAPI(NovemAPI):
         Walks the folder and for each file: PUT to create, then POST content.
         """
 
-        qpath = f"{self._api_root}jobs/{self.id}"
+        qpath = self._path()
 
         def load_tree(local_path: str, api_path: str) -> None:
             full_local = os.path.join(inpath, local_path.lstrip("/")) if local_path else inpath
@@ -550,7 +555,7 @@ class NovemJobAPI(NovemAPI):
         clrs()
 
         # Base path without trailing slash - we'll add paths in rec_tree
-        qpath = f"{self._api_root}jobs/{self.id}"
+        qpath = self._path()
 
         # some display options
         c = "├"
