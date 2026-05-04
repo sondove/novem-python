@@ -28,13 +28,13 @@ class NovemVisAPI(NovemAPI):
         if "debug" in kwargs and kwargs["debug"]:
             self._debug = True
 
+        if "user" in kwargs and kwargs["user"]:
+            self.user = kwargs["user"]
+
         if "create" not in kwargs or kwargs["create"]:
             # let's create our plot if -C specified, always
             # create when used as an api unless specifically told not to
             self.api_create("")
-
-        if "user" in kwargs and kwargs["user"]:
-            self.user = kwargs["user"]
 
         if "qpr" in kwargs and kwargs["qpr"]:
             self._qpr = kwargs["qpr"].replace(",", "&")

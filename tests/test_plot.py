@@ -188,3 +188,31 @@ def test_plot_log(requests_mock, fs):
 
     output = f.getvalue().strip()
     assert output == "log_test_plot"
+
+
+def test_plot_with_user_does_not_create_on_caller_account(requests_mock):
+    """Constructing Plot(user=other) must not PUT to the caller's vis/plots/<id> path."""
+    base = os.path.dirname(os.path.abspath(__file__))
+    config_file = f"{base}/test.conf"
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    api_root = config["general"]["api_root"]
+
+    own_put_calls = {"n": 0}
+
+    def own_put(request, context):
+        own_put_calls["n"] += 1
+        return ""
+
+    # Caller's own path — must not be hit
+    requests_mock.register_uri("put", f"{api_root}vis/plots/shared_plot", text=own_put)
+    # Read on the user-prefixed path is fine
+    requests_mock.register_uri("get", f"{api_root}users/alice/vis/plots/shared_plot/log", text="x")
+
+    p = Plot(id="shared_plot", user="alice", config_path=config_file)
+
+    f = io.StringIO()
+    with redirect_stdout(f):
+        p.log
+
+    assert own_put_calls["n"] == 0, "Plot(user=...) leaked a PUT onto the caller's account"

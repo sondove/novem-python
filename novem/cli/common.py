@@ -112,8 +112,14 @@ class VisBase:
             # We'll just use the raw api
             novem = NovemAPI(**args, is_cli=True)
 
+            usr_for_path = args.get("for_user") or None
+            if usr_for_path:
+                api_path = f"users/{usr_for_path}/vis/{self.fragment}/{name}"
+            else:
+                api_path = f"vis/{self.fragment}/{name}"
+
             try:
-                novem.delete(f"vis/{self.fragment}/{name}")
+                novem.delete(api_path)
                 return
             except Novem404:
                 print(f"{self.title} {name} did not exist")
@@ -343,8 +349,10 @@ def job(args: Dict[str, Any]) -> None:
     # Delete job
     if args["delete"]:
         novem = NovemAPI(**args, is_cli=True)
+        usr_for_path = args.get("for_user") or None
+        api_path = f"users/{usr_for_path}/code/jobs/{name}" if usr_for_path else f"code/jobs/{name}"
         try:
-            novem.delete(f"jobs/{name}")
+            novem.delete(api_path)
             return
         except Novem404:
             print(f"Job {name} did not exist")
@@ -376,8 +384,15 @@ def job(args: Dict[str, Any]) -> None:
     # -R (run): trigger job execution, optionally with file attachments
     if args.get("run_job") is not None:
         files = args["run_job"]
-        j.run(files=files if files else None, output=args.get("output_dir"))
+        j.run(
+            files=files if files else None,
+            input_dir=args.get("input_dir"),
+            output=args.get("output_dir"),
+        )
         return
+
+    if args.get("input_dir"):
+        print("Warning: -i/--input has no effect without -R (which triggers the run)", file=sys.stderr)
 
     # --dump: dump entire API tree to file
     if "dump" in args and args["dump"]:

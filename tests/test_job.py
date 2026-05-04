@@ -35,7 +35,7 @@ def test_job_ref(requests_mock):
     # Job creation endpoint
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_id}",
+        f"{api_root}code/jobs/{job_id}",
         text=verify_create,
     )
     requests_mock.register_uri(
@@ -92,57 +92,57 @@ def test_job_properties(requests_mock):
     # Job creation endpoint
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_id}",
+        f"{api_root}code/jobs/{job_id}",
         text=verify_create,
     )
 
     # Property endpoints - GET
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/name",
+        f"{api_root}code/jobs/{job_id}/name",
         text=partial(verify_read, "name", job_name),
     )
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/description",
+        f"{api_root}code/jobs/{job_id}/description",
         text=partial(verify_read, "description", job_description),
     )
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/summary",
+        f"{api_root}code/jobs/{job_id}/summary",
         text=partial(verify_read, "summary", job_summary),
     )
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/config/type",
+        f"{api_root}code/jobs/{job_id}/config/type",
         text=partial(verify_read, "type", job_type),
     )
 
     # Property endpoints - POST (write)
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/name",
+        f"{api_root}code/jobs/{job_id}/name",
         text=partial(verify_write, "name", job_name),
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/description",
+        f"{api_root}code/jobs/{job_id}/description",
         text=partial(verify_write, "description", job_description),
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/summary",
+        f"{api_root}code/jobs/{job_id}/summary",
         text=partial(verify_write, "summary", job_summary),
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/config/type",
+        f"{api_root}code/jobs/{job_id}/config/type",
         text=partial(verify_write, "type", job_type),
     )
 
@@ -205,45 +205,45 @@ def test_job_config(requests_mock):
     # Job creation endpoint
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_id}",
+        f"{api_root}code/jobs/{job_id}",
         text=verify_create,
     )
 
     # Config endpoints - GET
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/config/type",
+        f"{api_root}code/jobs/{job_id}/config/type",
         text=partial(verify_read, "type", job_type),
     )
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/config/extract",
+        f"{api_root}code/jobs/{job_id}/config/extract",
         text=partial(verify_read, "extract", job_extract),
     )
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/config/render",
+        f"{api_root}code/jobs/{job_id}/config/render",
         text=partial(verify_read, "render", job_render),
     )
 
     # Config endpoints - POST (write)
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/config/type",
+        f"{api_root}code/jobs/{job_id}/config/type",
         text=partial(verify_write, "type", job_type),
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/config/extract",
+        f"{api_root}code/jobs/{job_id}/config/extract",
         text=partial(verify_write, "extract", job_extract),
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/config/render",
+        f"{api_root}code/jobs/{job_id}/config/render",
         text=partial(verify_write, "render", job_render),
     )
 
@@ -280,20 +280,20 @@ def test_job_url_shortname(requests_mock):
     # Job creation endpoint
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_id}",
+        f"{api_root}code/jobs/{job_id}",
         text="",
     )
 
     # URL and shortname endpoints
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/url",
+        f"{api_root}code/jobs/{job_id}/url",
         text=job_url,
     )
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/shortname",
+        f"{api_root}code/jobs/{job_id}/shortname",
         text=job_shortname,
     )
 
@@ -310,8 +310,8 @@ def test_job_log(requests_mock, fs):
     job_id = "test_job"
     log_content = "2023-05-01 12:00:00 - Job created\n2023-05-01 12:05:00 - Job started"
 
-    requests_mock.register_uri("put", f"{API_ROOT}jobs/{job_id}", text="", status_code=200)
-    requests_mock.register_uri("get", f"{API_ROOT}jobs/{job_id}/log", text=log_content, status_code=200)
+    requests_mock.register_uri("put", f"{API_ROOT}code/jobs/{job_id}", text="", status_code=200)
+    requests_mock.register_uri("get", f"{API_ROOT}code/jobs/{job_id}/log", text=log_content, status_code=200)
 
     j = Job(job_id)
 
@@ -338,32 +338,32 @@ def test_job_api_operations(requests_mock):
     # Job creation endpoint
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_id}",
+        f"{api_root}code/jobs/{job_id}",
         text="",
     )
 
     # API operations
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}{test_path}",
+        f"{api_root}code/jobs/{job_id}{test_path}",
         text=test_content,
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}{test_path}",
+        f"{api_root}code/jobs/{job_id}{test_path}",
         text="",
     )
 
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_id}{test_path}",
+        f"{api_root}code/jobs/{job_id}{test_path}",
         text="",
     )
 
     requests_mock.register_uri(
         "delete",
-        f"{api_root}jobs/{job_id}{test_path}",
+        f"{api_root}code/jobs/{job_id}{test_path}",
         text="",
     )
 
@@ -393,21 +393,21 @@ def test_job_w_function(requests_mock):
     # Job creation endpoint
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_id}",
+        f"{api_root}code/jobs/{job_id}",
         text="",
     )
 
     # Name endpoint for property
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/name",
+        f"{api_root}code/jobs/{job_id}/name",
         text="",
     )
 
     # Custom key endpoint for API
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}{custom_key}",
+        f"{api_root}code/jobs/{job_id}{custom_key}",
         text="",
     )
 
@@ -437,20 +437,20 @@ def test_job_error_handling(requests_mock):
     # Job creation endpoint
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_id}",
+        f"{api_root}code/jobs/{job_id}",
         text="",
     )
 
     # Error responses
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}{test_path}",
+        f"{api_root}code/jobs/{job_id}{test_path}",
         status_code=404,
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}{test_path}",
+        f"{api_root}code/jobs/{job_id}{test_path}",
         status_code=403,
     )
 
@@ -489,26 +489,26 @@ def test_job_with_config_dict(requests_mock):
     # Job creation endpoint
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_id}",
+        f"{api_root}code/jobs/{job_id}",
         text="",
     )
 
     # Config endpoints - POST
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/config/type",
+        f"{api_root}code/jobs/{job_id}/config/type",
         text="",
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/config/extract",
+        f"{api_root}code/jobs/{job_id}/config/extract",
         text="",
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/config/render",
+        f"{api_root}code/jobs/{job_id}/config/render",
         text="",
     )
 
@@ -518,19 +518,19 @@ def test_job_with_config_dict(requests_mock):
     # Register GET endpoints to check the config was set via the config dictionary
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/config/type",
+        f"{api_root}code/jobs/{job_id}/config/type",
         text=job_type,
     )
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/config/extract",
+        f"{api_root}code/jobs/{job_id}/config/extract",
         text=job_extract,
     )
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/config/render",
+        f"{api_root}code/jobs/{job_id}/config/render",
         text=job_render,
     )
 
@@ -546,19 +546,19 @@ def test_job_with_config_dict(requests_mock):
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/config/type",
+        f"{api_root}code/jobs/{job_id}/config/type",
         text="",
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/config/extract",
+        f"{api_root}code/jobs/{job_id}/config/extract",
         text="",
     )
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{job_id}/config/render",
+        f"{api_root}code/jobs/{job_id}/config/render",
         text="",
     )
 
@@ -567,19 +567,19 @@ def test_job_with_config_dict(requests_mock):
     # Update mocks for the new config values
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/config/type",
+        f"{api_root}code/jobs/{job_id}/config/type",
         text=new_type,
     )
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/config/extract",
+        f"{api_root}code/jobs/{job_id}/config/extract",
         text=new_extract,
     )
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/config/render",
+        f"{api_root}code/jobs/{job_id}/config/render",
         text=new_render,
     )
 
@@ -602,8 +602,48 @@ def _make_job(requests_mock, job_id="test_job"):
     config.read(config_file)
     api_root = config["general"]["api_root"]
 
-    requests_mock.register_uri("put", f"{api_root}jobs/{job_id}", text="")
+    requests_mock.register_uri("put", f"{api_root}code/jobs/{job_id}", text="")
     return Job(job_id, config_path=config_file), api_root
+
+
+def _make_shared_job(requests_mock, job_id="test_job", user="alice"):
+    """Helper: create a Job pointed at another user's namespace, no create call."""
+    base = os.path.dirname(os.path.abspath(__file__))
+    config_file = f"{base}/test.conf"
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    api_root = config["general"]["api_root"]
+    return Job(job_id, user=user, create=False, config_path=config_file), api_root
+
+
+def test_job_user_prefix_api_read(requests_mock):
+    """api_read on a Job with user= targets users/<user>/jobs/<id>/..."""
+    j, api_root = _make_shared_job(requests_mock, user="alice")
+    requests_mock.register_uri("get", f"{api_root}users/alice/code/jobs/{j.id}/log", text="hello\n")
+    assert j.api_read("/log") == "hello\n"
+
+
+def test_job_user_prefix_log_property(requests_mock, capsys):
+    """The .log property on a shared job hits the user-prefixed path."""
+    j, api_root = _make_shared_job(requests_mock, user="alice")
+    requests_mock.register_uri("get", f"{api_root}users/alice/code/jobs/{j.id}/log", text="line\n")
+    j.log
+    assert "line" in capsys.readouterr().out
+
+
+def test_job_user_prefix_run(requests_mock, tmp_path):
+    """run() on a shared job posts to users/<user>/jobs/<id>/data."""
+    j, api_root = _make_shared_job(requests_mock, user="alice")
+
+    captured = {}
+
+    def handler(request, context):
+        captured["url"] = request.url
+        return ""
+
+    requests_mock.register_uri("post", f"{api_root}users/alice/code/jobs/{j.id}/data", text=handler)
+    j.run()
+    assert "users/alice/code/jobs/" in captured["url"]
 
 
 def test_job_run_no_files(requests_mock):
@@ -617,7 +657,7 @@ def test_job_run_no_files(requests_mock):
         captured["body"] = request.text
         return ""
 
-    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text=handler)
+    requests_mock.register_uri("post", f"{api_root}code/jobs/{j.id}/data", text=handler)
 
     j.run()
     assert "application/json" in captured["content_type"]
@@ -641,7 +681,7 @@ def test_job_run_with_files(requests_mock, tmp_path):
         captured["body"] = request.body
         return ""
 
-    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text=handler)
+    requests_mock.register_uri("post", f"{api_root}code/jobs/{j.id}/data", text=handler)
 
     j.run(files=[f"@{f1}", f"@{f2}"])
 
@@ -663,7 +703,7 @@ def test_job_run_with_files(requests_mock, tmp_path):
 def test_job_run_missing_at_prefix(requests_mock, tmp_path):
     """run() rejects file args without @ prefix."""
     j, api_root = _make_job(requests_mock)
-    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text="")
+    requests_mock.register_uri("post", f"{api_root}code/jobs/{j.id}/data", text="")
 
     f1 = tmp_path / "data.csv"
     f1.write_text("a,b\n1,2\n")
@@ -675,7 +715,7 @@ def test_job_run_missing_at_prefix(requests_mock, tmp_path):
 def test_job_run_file_not_found(requests_mock):
     """run() exits if a file does not exist."""
     j, api_root = _make_job(requests_mock)
-    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text="")
+    requests_mock.register_uri("post", f"{api_root}code/jobs/{j.id}/data", text="")
 
     with pytest.raises(SystemExit):
         j.run(files=["@nonexistent.csv"])
@@ -695,7 +735,7 @@ def test_job_run_single_file(requests_mock, tmp_path):
         captured["body"] = request.body
         return ""
 
-    requests_mock.register_uri("post", f"{api_root}jobs/{j.id}/data", text=handler)
+    requests_mock.register_uri("post", f"{api_root}code/jobs/{j.id}/data", text=handler)
 
     j.run(files=[f"@{f1}"])
 
@@ -715,7 +755,7 @@ def test_job_run_api_error(requests_mock, tmp_path, capsys):
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{j.id}/data",
+        f"{api_root}code/jobs/{j.id}/data",
         json={"error": "quota exceeded"},
         status_code=402,
     )
@@ -725,6 +765,117 @@ def test_job_run_api_error(requests_mock, tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert "quota exceeded" in out
+
+
+# ---------------------------------------------------------------------------
+# run() input directory tests (-i)
+# ---------------------------------------------------------------------------
+
+
+def test_job_run_with_input_dir_preserves_subpaths(requests_mock, tmp_path):
+    """run(input_dir=...) walks the folder and preserves relative paths."""
+    j, api_root = _make_job(requests_mock)
+
+    indir = tmp_path / "in"
+    (indir / "sub").mkdir(parents=True)
+    (indir / "top.csv").write_text("x\n")
+    (indir / "sub" / "nested.json").write_text("{}")
+
+    captured = {}
+
+    def handler(request, context):
+        captured["content_type"] = request.headers.get("Content-Type", "")
+        captured["body"] = request.body
+        return ""
+
+    requests_mock.register_uri("post", f"{api_root}code/jobs/{j.id}/data", text=handler)
+
+    j.run(input_dir=str(indir))
+
+    assert "multipart/form-data" in captured["content_type"]
+    body = captured["body"]
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+    # Relative path with forward slash must reach the wire
+    assert "sub/nested.json" in body
+    assert "top.csv" in body
+
+
+def test_job_run_input_dir_skips_dotfiles(requests_mock, tmp_path):
+    """run(input_dir=...) skips hidden files and hidden directories."""
+    j, api_root = _make_job(requests_mock)
+
+    indir = tmp_path / "in"
+    (indir / "sub").mkdir(parents=True)
+    (indir / ".git").mkdir()
+    (indir / "data.csv").write_text("x\n")
+    (indir / ".secret").write_text("nope")
+    (indir / "sub" / "ok.json").write_text("{}")
+    (indir / "sub" / ".hidden").write_text("nope")
+    (indir / ".git" / "HEAD").write_text("ref")
+
+    captured = {}
+
+    def handler(request, context):
+        captured["body"] = request.body
+        return ""
+
+    requests_mock.register_uri("post", f"{api_root}code/jobs/{j.id}/data", text=handler)
+
+    j.run(input_dir=str(indir))
+
+    body = captured["body"]
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+    assert "data.csv" in body
+    assert "sub/ok.json" in body
+    # dotfiles and contents of hidden dirs must not appear
+    assert ".secret" not in body
+    assert ".hidden" not in body
+    assert "HEAD" not in body
+
+
+def test_job_run_input_dir_missing(requests_mock):
+    """run(input_dir=...) exits if the directory does not exist."""
+    j, api_root = _make_job(requests_mock)
+    requests_mock.register_uri("post", f"{api_root}code/jobs/{j.id}/data", text="")
+
+    with pytest.raises(SystemExit):
+        j.run(input_dir="/nope/does/not/exist")
+
+
+def test_job_run_files_override_input_dir(requests_mock, tmp_path, capsys):
+    """When -R basename collides with an -i entry, -R wins and a warning is emitted."""
+    j, api_root = _make_job(requests_mock)
+
+    indir = tmp_path / "in"
+    indir.mkdir()
+    (indir / "data.csv").write_text("from-input\n")
+
+    other = tmp_path / "other"
+    other.mkdir()
+    explicit = other / "data.csv"
+    explicit.write_text("from-R\n")
+
+    captured = {}
+
+    def handler(request, context):
+        captured["body"] = request.body
+        return ""
+
+    requests_mock.register_uri("post", f"{api_root}code/jobs/{j.id}/data", text=handler)
+
+    j.run(files=[f"@{explicit}"], input_dir=str(indir))
+
+    body = captured["body"]
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+    # Only the -R version's content should be present
+    assert "from-R" in body
+    assert "from-input" not in body
+
+    err = capsys.readouterr().err
+    assert "overrides" in err
 
 
 # ---------------------------------------------------------------------------
@@ -739,7 +890,7 @@ def test_job_run_output_saves_file(requests_mock, tmp_path):
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{j.id}/data",
+        f"{api_root}code/jobs/{j.id}/data",
         content=b"col1,col2\n1,2\n",
         headers={"Content-Disposition": 'attachment; filename="report.csv"'},
     )
@@ -758,7 +909,7 @@ def test_job_run_output_rfc8187_filename(requests_mock, tmp_path):
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{j.id}/data",
+        f"{api_root}code/jobs/{j.id}/data",
         content=b"data",
         headers={"Content-Disposition": "attachment; filename*=UTF-8''r%C3%A9sult.pdf"},
     )
@@ -776,7 +927,7 @@ def test_job_run_output_fallback_name(requests_mock, tmp_path):
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{j.id}/data",
+        f"{api_root}code/jobs/{j.id}/data",
         content=b"hello",
         headers={},
     )
@@ -798,7 +949,7 @@ def test_job_run_output_dedup(requests_mock, tmp_path):
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{j.id}/data",
+        f"{api_root}code/jobs/{j.id}/data",
         content=b"new data",
         headers={"Content-Disposition": 'attachment; filename="report.csv"'},
     )
@@ -817,7 +968,7 @@ def test_job_run_output_creates_dir(requests_mock, tmp_path):
 
     requests_mock.register_uri(
         "post",
-        f"{api_root}jobs/{j.id}/data",
+        f"{api_root}code/jobs/{j.id}/data",
         content=b"ok",
         headers={"Content-Disposition": 'attachment; filename="out.txt"'},
     )

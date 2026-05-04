@@ -41,9 +41,9 @@ class NovemJobAPI(NovemAPI):
 
         self.config = NovemJobConfig(self)
         if self.user:
-            base_path = f"users/{self.user}/jobs/{self.id}"
+            base_path = f"users/{self.user}/code/jobs/{self.id}"
         else:
-            base_path = f"jobs/{self.id}"
+            base_path = f"code/jobs/{self.id}"
         self.shared = NovemShare(self, base_path)
         self.tags = NovemTags(self, base_path)
 
@@ -89,12 +89,17 @@ class NovemJobAPI(NovemAPI):
         else:
             super().__setattr__(name, value)
 
+    def _path(self, relpath: str = "") -> str:
+        if self.user:
+            return f"{self._api_root}users/{self.user}/code/jobs/{self.id}{relpath}"
+        return f"{self._api_root}code/jobs/{self.id}{relpath}"
+
     def api_read(self, relpath: str) -> str:
         """
         Read the api value located at realtive path
         """
 
-        qpath = f"{self._api_root}jobs/{self.id}{relpath}"
+        qpath = self._path(relpath)
 
         if self._debug:
             print(f"GET: {qpath}")
@@ -116,8 +121,11 @@ class NovemJobAPI(NovemAPI):
                  for the type file in the config folder
         value: the value to write to the file
         """
+        if self.user:
+            print("You cannot modify another user's job")
+            return
 
-        path = f"{self._api_root}jobs/{self.id}{relpath}"
+        path = self._path(relpath)
 
         if self._debug:
             print(f"DELETE: {path}")
@@ -148,8 +156,11 @@ class NovemJobAPI(NovemAPI):
                  for the type file in the config folder
         value: the value to write to the file
         """
+        if self.user:
+            print("You cannot modify another user's job")
+            return
 
-        path = f"{self._api_root}jobs/{self.id}{relpath}"
+        path = self._path(relpath)
 
         if self._debug:
             print(f"PUT: {path}")
@@ -185,8 +196,11 @@ class NovemJobAPI(NovemAPI):
                  for the type file in the config folder
         value: the value to write to the file
         """
+        if self.user:
+            print("You cannot modify another user's job")
+            return
 
-        path = f"{self._api_root}jobs/{self.id}{relpath}"
+        path = self._path(relpath)
 
         if self._debug:
             print(f"POST: {path}")
@@ -327,27 +341,55 @@ class NovemJobAPI(NovemAPI):
                 return candidate
             n += 1
 
-    def run(self, files: Optional[List[str]] = None, output: Optional[str] = None) -> None:
+    def run(
+        self,
+        files: Optional[List[str]] = None,
+        input_dir: Optional[str] = None,
+        output: Optional[str] = None,
+    ) -> None:
         """
         Trigger a job run by posting to /data.
 
         If *files* is provided, each entry must be prefixed with ``@``
         (e.g. ``@data.csv``).  The files are sent as ``multipart/form-data``
-        with field names ``file_0``, ``file_1``, … and the original filename
-        preserved.  Without files, an empty JSON body is sent.
+        with field names ``file_0``, ``file_1``, … and the basename preserved.
+
+        If *input_dir* is provided, every file under that directory is uploaded
+        too, using its path relative to *input_dir* as the multipart filename
+        so subdirectories are preserved on the server.
+
+        When the same multipart filename appears in both sources, the *files*
+        entry wins and a warning is emitted.
+
+        Without files or input_dir, an empty JSON body is sent.
 
         If *output* is provided, the response body is saved to that directory
         (created if necessary) using the filename from the server's
         Content-Disposition header.
         """
-        path = f"{self._api_root}jobs/{self.id}/data"
+        path = self._path("/data")
 
         if self._debug:
             print(f"POST: {path}")
 
+        upload: Dict[str, str] = {}
+
+        if input_dir:
+            if not os.path.isdir(input_dir):
+                print(f"Error: input directory not found: {input_dir}")
+                sys.exit(1)
+            for root, dirs, walked in os.walk(input_dir):
+                # skip hidden directories in-place so we don't descend into them
+                dirs[:] = [d for d in dirs if not d.startswith(".")]
+                for entry in walked:
+                    if entry.startswith("."):
+                        continue
+                    fpath = os.path.join(root, entry)
+                    rel = os.path.relpath(fpath, input_dir).replace(os.sep, "/")
+                    upload[rel] = fpath
+
         if files:
-            multipart: List[Tuple[str, Any]] = []
-            for idx, raw in enumerate(files):
+            for raw in files:
                 if not raw.startswith("@"):
                     print(f"Error: file arguments must start with @, got: {raw}")
                     sys.exit(1)
@@ -355,12 +397,24 @@ class NovemJobAPI(NovemAPI):
                 if not os.path.isfile(fpath):
                     print(f"Error: file not found: {fpath}")
                     sys.exit(1)
-                multipart.append((f"file_{idx}", (os.path.basename(fpath), open(fpath, "rb"))))
+                mp_name = os.path.basename(fpath)
+                if mp_name in upload and upload[mp_name] != fpath:
+                    print(
+                        f"Warning: -R @{fpath} overrides -i entry {upload[mp_name]} " f"(both upload as {mp_name})",
+                        file=sys.stderr,
+                    )
+                upload[mp_name] = fpath
+
+        if upload:
+            multipart: List[Tuple[str, Any]] = [
+                (f"file_{idx}", (mp_name, open(fpath, "rb"))) for idx, (mp_name, fpath) in enumerate(upload.items())
+            ]
             if self._debug:
-                names = [os.path.basename(raw[1:]) for raw in files]
-                print(f"  files: {names}")
+                print(f"  files in:  {len(upload)} ({list(upload.keys())})")
             r = self._session.post(path, files=multipart, stream=bool(output))
         else:
+            if self._debug:
+                print("  files in:  0")
             r = self._session.post(
                 path,
                 headers={"Content-type": "application/json; charset=utf-8"},
@@ -388,14 +442,16 @@ class NovemJobAPI(NovemAPI):
             with open(dest, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
-            print(dest)
+            if self._debug:
+                print(f"  files out: 1 ({name}) -> {dest}")
         elif r.content:
-            cd = r.headers.get("Content-Disposition", "")
-            fname = self._parse_filename(cd)
-            if fname:
-                print(f"Job produced output ({fname}). Use -o <dir> to save it.")
-            else:
-                print("Job completed.")
+            if self._debug:
+                cd = r.headers.get("Content-Disposition", "")
+                fname = self._parse_filename(cd)
+                print(f"  files out: 1 ({fname or 'unnamed'}, not saved — use -o)")
+        else:
+            if self._debug:
+                print("  files out: 0")
 
     def api_dump(self, outpath: str) -> None:
         """
@@ -403,7 +459,7 @@ class NovemJobAPI(NovemAPI):
         """
 
         # Base path without trailing slash
-        qpath = f"{self._api_root}jobs/{self.id}"
+        qpath = self._path()
 
         # create util function
         def rec_tree(path: str) -> None:
@@ -469,8 +525,11 @@ class NovemJobAPI(NovemAPI):
         Load a dumped folder structure back into the API.
         Walks the folder and for each file: PUT to create, then POST content.
         """
+        if self.user:
+            print("You cannot modify another user's job")
+            return
 
-        qpath = f"{self._api_root}jobs/{self.id}"
+        qpath = self._path()
 
         def load_tree(local_path: str, api_path: str) -> None:
             full_local = os.path.join(inpath, local_path.lstrip("/")) if local_path else inpath
@@ -516,7 +575,7 @@ class NovemJobAPI(NovemAPI):
         clrs()
 
         # Base path without trailing slash - we'll add paths in rec_tree
-        qpath = f"{self._api_root}jobs/{self.id}"
+        qpath = self._path()
 
         # some display options
         c = "├"

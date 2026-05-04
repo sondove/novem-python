@@ -576,14 +576,14 @@ def test_job_tags_integration(requests_mock):
     # Mock job creation endpoint
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_id}",
+        f"{api_root}code/jobs/{job_id}",
         text="",
     )
 
     # Tags endpoints
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_id}/tags",
+        f"{api_root}code/jobs/{job_id}/tags",
         text=get_tags,
     )
 
@@ -591,12 +591,12 @@ def test_job_tags_integration(requests_mock):
     for tag in ["fav", "like", "ignore", "wip", "archived", "+project_x"]:
         requests_mock.register_uri(
             "put",
-            f"{api_root}jobs/{job_id}/tags/{tag}",
+            f"{api_root}code/jobs/{job_id}/tags/{tag}",
             text=partial(put_tag, tag),
         )
         requests_mock.register_uri(
             "delete",
-            f"{api_root}jobs/{job_id}/tags/{tag}",
+            f"{api_root}code/jobs/{job_id}/tags/{tag}",
             text=partial(del_tag, tag),
         )
 

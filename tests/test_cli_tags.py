@@ -244,14 +244,14 @@ def test_job_tag_list(cli, requests_mock, fs):
 
     requests_mock.register_uri(
         "get",
-        f"{api_root}jobs/{job_name}/tags",
+        f"{api_root}code/jobs/{job_name}/tags",
         text=json.dumps(tags),
         status_code=200,
     )
 
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_name}",
+        f"{api_root}code/jobs/{job_name}",
         status_code=201,
     )
 
@@ -279,22 +279,22 @@ def test_job_tag_add(cli, requests_mock, fs):
         context.status_code = 200
         return json.dumps([{"name": x} for x in tags])
 
-    requests_mock.register_uri("get", f"{api_root}jobs/{job_name}/tags", text=get_tags)
+    requests_mock.register_uri("get", f"{api_root}code/jobs/{job_name}/tags", text=get_tags)
 
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_name}/tags/fav",
+        f"{api_root}code/jobs/{job_name}/tags/fav",
         text=partial(add_tag, "fav"),
     )
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_name}/tags/wip",
+        f"{api_root}code/jobs/{job_name}/tags/wip",
         text=partial(add_tag, "wip"),
     )
 
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_name}",
+        f"{api_root}code/jobs/{job_name}",
         status_code=201,
     )
 
@@ -325,17 +325,17 @@ def test_job_tag_delete(cli, requests_mock, fs):
         context.status_code = 200
         return json.dumps([{"name": x} for x in tags])
 
-    requests_mock.register_uri("get", f"{api_root}jobs/{job_name}/tags", text=get_tags)
+    requests_mock.register_uri("get", f"{api_root}code/jobs/{job_name}/tags", text=get_tags)
 
     requests_mock.register_uri(
         "delete",
-        f"{api_root}jobs/{job_name}/tags/wip",
+        f"{api_root}code/jobs/{job_name}/tags/wip",
         text=partial(del_tag, "wip"),
     )
 
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_name}",
+        f"{api_root}code/jobs/{job_name}",
         status_code=201,
     )
 
@@ -409,18 +409,18 @@ def test_job_multiple_tags_delete(cli, requests_mock, fs):
         context.status_code = 200
         return json.dumps([{"name": x} for x in tags])
 
-    requests_mock.register_uri("get", f"{api_root}jobs/{job_name}/tags", text=get_tags)
+    requests_mock.register_uri("get", f"{api_root}code/jobs/{job_name}/tags", text=get_tags)
 
     for tag in ["fav", "wip"]:
         requests_mock.register_uri(
             "delete",
-            f"{api_root}jobs/{job_name}/tags/{tag}",
+            f"{api_root}code/jobs/{job_name}/tags/{tag}",
             text=partial(del_tag, tag),
         )
 
     requests_mock.register_uri(
         "put",
-        f"{api_root}jobs/{job_name}",
+        f"{api_root}code/jobs/{job_name}",
         status_code=201,
     )
 

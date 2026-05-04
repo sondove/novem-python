@@ -365,8 +365,14 @@ def list_vis_shares(vis_name: str, args: Dict[str, str], type: str) -> None:
 
     plist = []
 
+    for_user = args.get("for_user")
+    if for_user:
+        share_path = f"users/{for_user}/vis/{pth}s/{vis_name}/shared"
+    else:
+        share_path = f"vis/{pth}s/{vis_name}/shared"
+
     try:
-        plist = json.loads(novem.read(f"vis/{pth}s/{vis_name}/shared"))
+        plist = json.loads(novem.read(share_path))
     except Novem404:
         plist = []
 
@@ -389,8 +395,14 @@ def list_job_shares(job_name: str, args: Dict[str, str]) -> None:
 
     plist = []
 
+    for_user = args.get("for_user")
+    if for_user:
+        share_path = f"users/{for_user}/code/jobs/{job_name}/shared"
+    else:
+        share_path = f"code/jobs/{job_name}/shared"
+
     try:
-        plist = json.loads(novem.read(f"jobs/{job_name}/shared"))
+        plist = json.loads(novem.read(share_path))
     except Novem404:
         plist = []
 
@@ -525,9 +537,9 @@ def list_job_tags(job_name: str, args: Dict[str, str]) -> None:
 
     for_user = args.get("for_user")
     if for_user:
-        tag_path = f"users/{for_user}/jobs/{job_name}/tags"
+        tag_path = f"users/{for_user}/code/jobs/{job_name}/tags"
     else:
-        tag_path = f"jobs/{job_name}/tags"
+        tag_path = f"code/jobs/{job_name}/tags"
 
     try:
         plist = json.loads(novem.read(tag_path))
